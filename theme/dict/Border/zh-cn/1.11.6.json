@@ -1,9 +1,0 @@
-{
-    "manifest": {
-        "translationVersion": 1746322922214,
-        "pluginVersion": "1.11.6"
-    },
-    "dict": {
-        "description: \"🎨 Appearance presets: [get presets here](https://github.com/Akifyss/obsidian-border/blob/main/presets.md), click on “Import” in the top right corner and restart obsidian. <br> <br> 📭 If you have problems, please submit [issues](https://github.com/Akifyss/obsidian-border/issues) or [discuss](https://github.com/Akifyss/obsidian-border/discussions) on Github<br> <br> 🔼 View recent updates: [Github Commit History](https://github.com/Akifyss/obsidian-border/commits/main)\"": "description: \"🎨 外观预设：[在此获取预设](https://github.com/Akifyss/obsidian-border/blob/main/presets.md)，点击右上角的 \"Import\"，然后重启 Obsidian。 📭 如有问题，请在 Github 上提交 [issues](https://github.com/Akifyss/obsidian-border/issues) 或 [discuss](https://github.com/Akifyss/obsidian-border/discussions) 🔼 查看最近更新：[Github 提交历史](https://github.com/Akifyss/obsidian-border/commits/main)\""
-    }
-}

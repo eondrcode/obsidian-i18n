@@ -8,20 +8,21 @@
 # npm
 node_modules
 
-# 不要将编译后的 `main.js` 文件放入代码库中。应该将其上传到 GitHub 发布版中。
-main.js
-
-# Exclude sourcemaps
-*.map
-
 # obsidian
+main.js
+styles.css
 data.json
+main.js.map
+states.json
+metadata.json
+
+# 文件夹
+document
+translations
+backups
 
 # 排除macOS Finder （System Explorer）视图状态
 .DS_Store
 
-# 无
-笔记.md
-repealed.ts
-README.md
-i18n
+
+

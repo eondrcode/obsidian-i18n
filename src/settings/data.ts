@@ -1,275 +1,202 @@
-import { BAIDU, PageRule } from '../data/types';
+import { pageRule } from '../utils';
+import { DEFAULT_AST_PROMPT_TEMPLATE, DEFAULT_REGEX_PROMPT_TEMPLATE, DEFAULT_THEME_PROMPT_TEMPLATE } from '../ai/openai-translation-service';
 
 export interface I18nSettings {
-	// ==============================
-	//         基础设置
-	// ==============================
-	// 是否同意
-	I18N_AGREEMENT: boolean;
-	// 首次向导
-	I18N_WIZARD: boolean;
-	// UUID
-	I18N_UUID: string;
-	// 翻译语言
-	I18N_LANGUAGE: string;
-	// 主题色
-	I18N_COLOR: string;
-	// 签名
-	I18N_AUTHOR: string;
-	// 译文编辑
-	I18N_EDIT_MODE: boolean;
-	// 打开设置
-	I18N_OPEN_SETTINGS: boolean;
-	// 检查更新
-	I18N_CHECK_UPDATES: boolean;
-	// 网络文件配置
-	I18N_SEARCH_TEXT: string;
-	// 排序
-	I18N_SORT: string;
-	// 类型
-	I18N_TYPE: string;
+    // ==============================
+    // 基础设置
+    // ==============================
+    agreement: boolean;        // 用户是否已同意协议
+    language: string;          // 目标翻译语言类型
+    checkUpdates: boolean;    // 是否自动检查插件更新
+    searchText: string;       // 网络文件配置：搜索文本
+    sort: string;              // 列表排序方式 (0: 正序, 1: 倒序)
+    author: string;            // 默认作者署名
+    mode: number;              // 插件运行模式 (待定/保留字段)
 
-	I18N_MODE: number;
+    // ==============================
+    // 本地模式 (LDT)
+    // ==============================
+    automaticUpdate: boolean; // 是否在插件更新后自动应用旧版译文
 
-	I18N_NOTICE: boolean;
-
-	I18N_START_TIME: boolean;
+    // ==============================
+    // 语言模型翻译配置 (LLM)
+    // ==============================
+    llmApi: number;                 // 当前选中的 LLM 服务商 (1: OpenAI, etc.)
+    llmResponseFormat: string;      // LLM 返回格式 (text, json_object)
+    llmLanguage: string;            // LLM 翻译的目标语言
+    llmStyle: string;               // LLM 翻译的风格类型
+    llmBatchSize: number;           // LLM 批量翻译并行的文本条数
+    llmConcurrencyLimit: number;    // LLM 并发请求限制数
+    llmTimeout: number;             // LLM 请求超时时间 (毫秒)
 
 
+    llmRegexPrompt?: string;        // LLM Regex 自定义提示词模板
+    llmAstPrompt?: string;          // LLM AST 自定义提示词模板
+    llmThemePrompt?: string;        // LLM Theme 自定义提示词模板
 
-	// ==============================
-	//         本地模式
-	// ==============================
-	I18N_MODE_LDT: boolean;
-	// 词典重载
-	I18N_AUTOMATIC_UPDATE: boolean;
-	// 增量提取
-	I18N_INCREMENTAL_EXTRACTION: boolean;
-	// 名称翻译
-	I18N_NAME_TRANSLATION: boolean;
-	// 名称翻译 前缀
-	I18N_NAME_TRANSLATION_PREFIX: string;
-	// 名称翻译 后缀
-	I18N_NAME_TRANSLATION_SUFFIX: string;
-	I18N_STYLE_SETTINGS: string;
+    // OpenAI 专属配置
+    llmOpenaiUrl: string;           // OpenAI API 代理/基础接口地址
+    llmOpenaiKey: string;           // OpenAI API 密钥
+    llmOpenaiModel: string;         // 选用的 OpenAI 模型名
 
-	// ==============================
-	//         云端模式
-	// ==============================
-	I18N_MODE_NDT: boolean;
-	// 忽略插件
-	I18N_IGNORE: boolean;
-	I18N_NDT_URL: string;
+    // ==============================
+    // 沉浸式翻译配置 (IMT)
+    // ==============================
+    modeImt: boolean;         // 是否启用沉浸式翻译
+    imtPagerule: pageRule;    // 沉浸式翻译页面的匹配规则
 
-	// ==============================
-	//         机器翻译
-	// ==============================
-	I18N_MODE_NIT: boolean;
-	I18N_NIT_API: string;
-	I18N_NIT_API_INTERVAL: number;
-	I18N_NIT_APIS: { BAIDU: BAIDU };
-	I18N_NIT_OPENAI_URL: string;
-	I18N_NIT_OPENAI_KEY: string;
-	I18N_NIT_OPENAI_MODEL: string;
-	I18N_NIT_OPENAI_TIPS: string;
+    // ==============================
+    // 共建云端翻译 (Share)
+    // ==============================
+    shareToken: string;       // 用户提交翻译用的 Gitee Token
+    shareRepo: string;        // 用户的个人翻译 Gitee 仓库名
 
-	// ==============================
-	//         沉浸翻译
-	// ==============================
-	I18N_MODE_IMT: boolean;
-	I18N_IMT_CONFIG: PageRule;
+    // ==============================
+    // 正则提取匹配规则
+    // ==============================
+    reTemp: string;           // 临时测试用的正则表达式片段
+    reTempMode: boolean;     // 临时正则匹配模式开关
+    reFlags: string;          // 正则表达式的匹配修饰符 (默认: gs)
+    reLength: number;         // 提取文本的最大长度限制
+    reDatas: string[];        // 核心源码中用于捕获文本的正式正则表达式列表
+    reRejectRe: string[];    // 正则提取排除正则
+    reValidRe: string[];     // 正则提取有效正则
 
-	// ==============================
-	//         共建云端
-	// ==============================
-	// 译文提交
-	I18N_SHARE_MODE: boolean;
-	// 提交token
-	I18N_SHARE_TOKEN: string;
+    // ==============================
+    // AST 提取规则
+    // ==============================
+    astAssignments: string[]; // 赋值白名单
+    astFunctions: string[];   // 函数白名单
+    astKeys: string[];        // 键名白名单
+    astRejectRe: string[];   // 排除正则 (字符串形式)
+    astValidRe: string[];    // 有效正则 (字符串形式)
 
-	I18N_ADMIN_MODE: boolean;
-	I18N_ADMIN_VERIFY: boolean;
-	I18N_ADMIN_TOKEN: string;
+    // ==============================
+    // 资源仓库列表
+    // ==============================
+    cloudRepos: string[];     // 云端默认加载的插件资源列表仓库
 
-	// ==============================
-	//         正则匹配
-	// ==============================
-	I18N_RE_TEMP: string;
-	I18N_RE_TEMP_MODE: boolean;
-	I18N_RE_MODE: string;
-	I18N_RE_FLAGS: string;
-	I18N_RE_LENGTH: number;
-	I18N_RE_MODE_EDIT: boolean,
-	I18N_RE_MODE_DISPLAY: boolean;
-	I18N_RE_DATAS_DISPLAY: boolean;
-	I18N_RE_MODES: string[];
-	I18N_RE_DATAS: Record<string, string[]>;
-
-	// ==============================
-	//         Styles
-	// ==============================
-	I18N_TAG_TYPE: string;
-	I18N_TAG_SHAPE: string;
-	I18N_BUTTON_TYPE: string;
-	I18N_BUTTON_SHAPE: string;
+    // ==============================
+    // 管理器状态持久化
+    // ==============================
+    managerTab: string;       // 管理器当前选中的 Tab (plugins/themes)
+    pluginViewMode: 'list' | 'grid'; // 插件管理器视图模式
+    themeViewMode: 'list' | 'grid'; // 主题管理器视图模式
+    autoSave: boolean;        // 编辑器是否开启自动保存
 }
 
 export const DEFAULT_SETTINGS: I18nSettings = {
-	// ==============================
-	//         基础设置
-	// ==============================
-	// 同意
-	I18N_AGREEMENT: false,
-	// 首次向导
-	I18N_WIZARD: true,
-	// UUID
-	I18N_UUID: '',
-	// 翻译语言
-	I18N_LANGUAGE: 'zh-cn',
-	// 主题色
-	I18N_COLOR: '#409EFF',
-	// 签名
-	I18N_AUTHOR: '',
-	// 译文编辑
-	I18N_EDIT_MODE: true,
-	// 打开设置
-	I18N_OPEN_SETTINGS: true,
-	// 检查更新
-	I18N_CHECK_UPDATES: true,
-	// 网络文件配置
-	I18N_SEARCH_TEXT: '',
-	// 排序
-	I18N_SORT: '0',
-	// 类型
-	I18N_TYPE: '0',
+    // ==============================
+    // 基础设置
+    // ==============================
+    agreement: true,           // 默认同意协议
+    language: 'zh-cn',         // 默认翻译语言为简体中文
+    checkUpdates: true,       // 默认开启检查更新
+    searchText: '',           // 默认无搜索文本
+    sort: '0',                 // 默认按正序排列
+    author: '',                // 默认作者署名为空
+    mode: 0,                   // 默认模式: 0
 
-	I18N_MODE: 0,
+    // ==============================
+    // 本地模式 (LDT)
+    // ==============================
+    automaticUpdate: false,   // 默认关闭自动更新译文
 
-	I18N_NOTICE: true,
-
-	I18N_START_TIME: true,
-
-	// ==============================
-	//         本地模式
-	// ==============================
-	I18N_MODE_LDT: true,
-	// 自动更新
-	I18N_AUTOMATIC_UPDATE: false,
-	// 增量提取
-	I18N_INCREMENTAL_EXTRACTION: false,
-	// 名称翻译
-	I18N_NAME_TRANSLATION: false,
-	// 名称翻译 前缀
-	I18N_NAME_TRANSLATION_PREFIX: '[',
-	// 名称翻译 后缀
-	I18N_NAME_TRANSLATION_SUFFIX: ']',
-
-	I18N_STYLE_SETTINGS: 'obsidian-style-settings',
-
-	// ==============================
-	//         云端模式
-	// ==============================
-	I18N_MODE_NDT: true,
-	// 忽略插件
-	I18N_IGNORE: false,
-	I18N_NDT_URL: 'gitee',
-
-	// ==============================
-	//         机器翻译
-	// ==============================
-	I18N_MODE_NIT: false,
-	I18N_NIT_API: 'BAIDU',
-	I18N_NIT_API_INTERVAL: 500,
-	I18N_NIT_APIS: {
-		BAIDU: { FROM: 'auto', TO: 'zh', APP_ID: '', KEY: '' }
-	},
-	I18N_NIT_OPENAI_URL: 'https://api.openai.com',
-	I18N_NIT_OPENAI_KEY: '',
-	I18N_NIT_OPENAI_MODEL: 'gpt-3.5-turbo',
-	I18N_NIT_OPENAI_TIPS: '你是一个翻译工作者，你将进行obsidian笔记软件的插件翻译，本次翻译的插件名称为: ${plugin}，请结合插件名称以及软件翻译的标准进行后续工作，因为大多数文本长度较短，请以符合中文习惯的方式翻译。接下来我会提交给你很多英文文本，请将其翻译为简体中文，并且只返回给我翻译后的内容',
-
-	// ==============================
-	//         沉浸翻译
-	// ==============================
-	I18N_MODE_IMT: false,
-	I18N_IMT_CONFIG: {
-		selectors: [
-			"*"
-		],
-		excludeSelectors: [
-			".modal .i18n__container"
-		],
-		excludeTags: [],
-		additionalSelectors: [],
-		additionalExcludeSelectors: [],
-		additionalExcludeTags: [],
-		stayOriginalSelectors: [],
-		stayOriginalTags: [],
-		atomicBlockSelectors: [],
-		atomicBlockTags: []
-	},
-
-	// ==============================
-	//         共建云端
-	// ==============================
-	// 模式开关
-	I18N_SHARE_MODE: true,
-	// 提交token
-	I18N_SHARE_TOKEN: '',
-
-	I18N_ADMIN_MODE: false,
-	I18N_ADMIN_VERIFY: false,
-	I18N_ADMIN_TOKEN: '',
+    // ==============================
+    // 语言模型翻译配置 (LLM)
+    // ==============================
+    llmApi: 1,                      // 默认使用第一类 API 配置 (OpenAI)
+    llmResponseFormat: 'text',      // 默认使用 text 的通用容错返回格式
+    llmLanguage: '简体中文',        // LLM 的默认生成语言
+    llmStyle: '无',                 // LLM 的默认生成风格
+    llmBatchSize: 10,               // 默认最大批量并发为 10 条
+    llmConcurrencyLimit: 3,         // 默认并发限制为 3
+    llmTimeout: 60000,              // 默认超时为 60 秒
 
 
-	// ==============================
-	//         正则匹配
-	// ==============================
-	I18N_RE_TEMP_MODE: true,
-	I18N_RE_TEMP: '',
-	I18N_RE_MODE: '默认',
-	I18N_RE_FLAGS: 'gs',
-	I18N_RE_LENGTH: 300,
-	I18N_RE_MODE_EDIT: false,
-	I18N_RE_MODE_DISPLAY: false,
-	I18N_RE_DATAS_DISPLAY: false,
-	I18N_RE_MODES: ['默认'],
-	I18N_RE_DATAS: {
-		'默认': [
-			"Notice\\(\\s*(.+?)\\s*\\)",
-			".log\\(\\s*(.+?)\\s*\\)",
-			".error\\(\\s*(.+?)\\s*\\)",
-			"t\\s*=\\s*:\\s*(['\"`])(.+?)\\1",
-			".textContent\\s*=\\s*:\\s*(['\"`])(.+?)\\1",
-			"name\\s*:\\s*(['\"`])(.+?)\\1",
-			"description\\s*:\\s*(['\"`])(.+?)\\1",
-			"selection\\s*:\\s*(['\"`])(.+?)\\1",
-			"annotation\\s*:\\s*(['\"`])(.+?)\\1",
-			"link\\s*:\\s*(['\"`])(.+?)\\1",
-			"text\\s*:\\s*(['\"`])(.+?)\\1",
-			"search\\s*:\\s*(['\"`])(.+?)\\1",
-			"speech\\s*:\\s*(['\"`])(.+?)\\1",
-			"page\\s*:\\s*(['\"`])(.+?)\\1",
-			"settings\\s*:\\s*(['\"`])(.+?)\\1",
-			".setText\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setButtonText\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setName\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setDesc\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setPlaceholder\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setTooltip\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".appendText\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".setTitle\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".addHeading\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".renderMarkdown\\(\\s*(['\"`])(.+?)\\1\\s*\\)",
-			".innerText\\s*=\\s*(['\"`]).*?\\1"
-		]
-	},
+    llmRegexPrompt: DEFAULT_REGEX_PROMPT_TEMPLATE,             // 默认加载内置的 Regex Prompt
+    llmAstPrompt: DEFAULT_AST_PROMPT_TEMPLATE,               // 默认加载内置的 AST Prompt
+    llmThemePrompt: DEFAULT_THEME_PROMPT_TEMPLATE,           // 默认加载内置的 Theme Prompt
 
-	// ==============================
-	//         Styles
-	// ==============================
-	I18N_TAG_TYPE: 'light',
-	I18N_TAG_SHAPE: 'square',
-	I18N_BUTTON_TYPE: 'default',
-	I18N_BUTTON_SHAPE: 'square',
+    // OpenAI 专属配置
+    llmOpenaiUrl: '',
+    llmOpenaiKey: '',
+    llmOpenaiModel: '',
+
+    // ==============================
+    // 沉浸式翻译配置 (IMT)
+    // ==============================
+    modeImt: false,           // 默认关闭沉浸式
+    imtPagerule: {
+        selectors: ["*"],
+        excludeSelectors: [],
+    },
+
+    // ==============================
+    // 共建云端翻译 (Share)
+    // ==============================
+    shareToken: '',           // 默认 Token 为空
+    shareRepo: '',            // 默认 Repo 为空
+
+    // ==============================
+    // 正则匹配
+    // ==============================
+    reTempMode: true,        // 默认启用正则临时模式
+    reTemp: '',               // 默认无临时正则
+    reFlags: 'gs',            // 默认全局搜索+忽略多行等限制
+    reLength: 300,            // 默认限制文本最长 300 字符
+    reDatas: [
+        "(Notice|log|error|setText|setButtonText|setName|setDesc|setPlaceholder|setTooltip|appendText|setTitle|addHeading|renderMarkdown)\\(\\s*(['\"`])(.*?)\\2\\s*\\)",
+        "(textContent|innerText|name|description|selection|annotation|link|text|search|speech|page|settings)\\s*[:=]\\s*(['\"`])(.*?)\\2"
+    ],
+    reRejectRe: [
+        "^\\s*$", "^\\d+$", "^[\\w-]+\\.[\\w-]+\\.\\w+$", "^https?:\\/\\/",
+        "^data:image\\/", "^#([0-9a-f]{3}|[0-9a-f]{6})$", "^[a-z0-9-]+$",
+        "^[a-z]+[A-Z][a-zA-Z0-9]*$", "^[A-Z_][A-Z0-9_]*$", "^px|em|rem|vh|vw|auto$",
+        "^rgba?\\(", "^\\.", "\\.(png|jpg|gif|svg|css|js|ts|md|json)$"
+    ],
+    reValidRe: [
+        "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
+    ],
+
+    // ==============================
+    // AST 提取规则
+    // ==============================
+    astAssignments: [
+        'overwriteName', 'innerHTML', 'outerHTML', 'title', 'alt', 'placeholder',
+        'textContent', 'innerText', 'ariaLabel', 'nodeValue'
+    ],
+    astFunctions: [
+        'Notice', 'setTitle', 'setContent', 'setName', 'setDesc', 'setButtonText',
+        'setPlaceholder', 'setTooltip', 'addOption', 'addHeading', 'addText',
+        'setHint', 'setWarning', 'setText', 'appendText', 'createEl', 'createDiv',
+        'createSpan', 'addCommand', 'insertText', 'replaceRange', 'replaceSelection',
+        'log', 'error', 'warn', 'info', 'alert', 'confirm', 'prompt'
+    ],
+    astKeys: [
+        'name', 'description', 'text', 'placeholder', 'label', 'tooltip', 'title',
+        'header', 'desc', 'message', 'buttontext', 'aria-label', 'heading', 'content',
+        'tab', 'caption', 'subtitle', 'summary', 'info', 'warning', 'error', 'success',
+        'hint', 'instructions', 'link', 'selection', 'annotation', 'search', 'speech',
+        'page', 'empty', 'detail', 'body', 'option', 'notice'
+    ],
+    astRejectRe: [
+        "^\\s*$", "^\\d+$", "^[\\w-]+\\.[\\w-]+\\.\\w+$", "^https?:\\/\\/",
+        "^data:image\\/", "^#([0-9a-f]{3}|[0-9a-f]{6})$", "^[a-z0-9-]+$",
+        "^[a-z]+[A-Z][a-zA-Z0-9]*$", "^[A-Z_][A-Z0-9_]*$", "^px|em|rem|vh|vw|auto$",
+        "^rgba?\\(", "^\\.", "\\.(png|jpg|gif|svg|css|js|ts|md|json)$"
+    ],
+    astValidRe: [
+        "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
+    ],
+
+    cloudRepos: ['obsidian-i18n-repos/awesome-plugins'],
+
+    // ==============================
+    // 管理器状态持久化
+    // ==============================
+    managerTab: 'plugins',
+    pluginViewMode: 'list',
+    themeViewMode: 'grid',
+    autoSave: true,
 }

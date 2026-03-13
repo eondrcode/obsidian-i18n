@@ -1,86 +1,113 @@
-import { Setting } from "obsidian";
+import { Setting, Notice } from "obsidian";
 import BaseSetting from "../base-setting";
-import { t } from "src/lang/inxdex";
-import { AdminModal } from "src/modal/i18n-admin-modal";
+import { t } from "src/locales";
+import { GitHubAPI } from "src/api/github";
 
 // ==============================
-//           共建云端
+//           个人云端同步
 // ==============================
 export default class I18nShare extends BaseSetting {
     main(): void {
-        new Setting(this.containerEl)
-            .setName(t('设置_共享_标题'))
-            .setDesc(t('设置_共享_描述'))
+        const { containerEl } = this;
+        containerEl.empty();
 
-        new Setting(this.containerEl)
-            .setName(t('设置_共享_贡献者_标题'))
-            .setDesc(t('设置_共享_贡献者_描述'))
-            .addText(cb => cb
-                .setValue(this.settings.I18N_SHARE_TOKEN)
-                .setPlaceholder(t('设置_共享_贡献者_提示'))
-                .onChange((value) => {
-                    this.settings.I18N_SHARE_TOKEN = value
-                    this.i18n.saveSettings();
-                }).inputEl.addClass('i18n-input')
-            ).addToggle(cb => cb
-                .setValue(this.settings.I18N_SHARE_MODE)
-                .onChange(() => {
-                    this.settings.I18N_SHARE_MODE = !this.settings.I18N_SHARE_MODE;
-                    this.i18n.saveSettings();
-                    this.settingTab.shareDisplay();
-                })
-                .toggleEl.addClass('i18n-checkbox')
-            );
+        // ==============================
+        //        1. 身份验证
+        // ==============================
+        containerEl.createEl('h2', { text: t('Settings.Share.AuthTitle') });
 
-        new Setting(this.containerEl)
-            .setName(`${t('设置_共享_管理员_标题')} (${this.settings.I18N_ADMIN_VERIFY ? '已验证' : '未验证'})`)
-            .setDesc(t('设置_共享_管理员_描述'))
-            .addButton(cb => cb.setButtonText('验证')
-                .setClass('i18n-button')
-                .setClass(`i18n-button--${this.i18n.settings.I18N_BUTTON_TYPE}-info`)
-                .setClass(`is-${this.i18n.settings.I18N_BUTTON_SHAPE}`)
-                .onClick(async () => {
-                    if (!this.settings.I18N_ADMIN_VERIFY) {
-                        const user = await this.i18n.api.giteeUser();
-                        const check = await this.i18n.api.checkUser(user.data.login);
-                        if (check.state) {
-                            this.settings.I18N_ADMIN_VERIFY = !this.settings.I18N_ADMIN_VERIFY;
-                            this.i18n.saveSettings();
-                            this.settingTab.shareDisplay();
-                            this.i18n.notice.result('共建云端', true, '验证成功');
+        // -- Access Token 配置 --
+        const tokenSetting = new Setting(containerEl)
+            .setName(t('Settings.Share.ModeTitle'))
+            .setDesc(this.settings.shareToken ? `${t('Settings.Share.LoginSuccess')}` : t('Settings.Share.ModeDesc'));
+
+        tokenSetting.addText(text => {
+            text.setValue(this.settings.shareToken)
+                .setPlaceholder(t('Settings.Share.TokenPlaceholder'))
+                .onChange(async (value) => {
+                    this.settings.shareToken = value.trim();
+                    await this.i18n.saveSettings();
+                });
+
+            // 失焦触发静默验证
+            text.inputEl.addEventListener('blur', async () => {
+                const token = this.settings.shareToken;
+                if (!token) return;
+
+                tokenSetting.setDesc(t('Settings.Share.Verifying'));
+
+                try {
+                    const github = new GitHubAPI(this.i18n);
+                    const res = await github.getUser();
+
+                    if (res.state) {
+                        const scopes = res.scopes || [];
+                        const hasRepoScope = scopes.includes('public_repo') || scopes.includes('repo');
+
+                        if (hasRepoScope) {
+                            tokenSetting.setDesc(`${t('Settings.Share.LoginSuccess')}: @${res.data.login}`);
                         } else {
-                            this.i18n.notice.result('共建云端', false, '验证失败');
+                            throw new Error(t('Settings.Share.VerifyInsufficient'));
                         }
                     } else {
-                        this.i18n.notice.result('共建云端', true, '您已验证,无需重复验证');
+                        throw new Error(t('Settings.Share.VerifyError'));
                     }
-                }).setClass(this.i18n.settings.I18N_ADMIN_VERIFY ? 'i18n--hidden' : 'i18n--none')
-            )
-            .addText(cb => cb
-                .setValue(this.settings.I18N_ADMIN_TOKEN)
-                .setPlaceholder(t('设置_共享_管理员_提示'))
-                .onChange((value) => {
-                    this.settings.I18N_ADMIN_TOKEN = value;
-                    this.i18n.saveSettings();
-                }).inputEl.addClass('i18n-input')
-            )
-            .addToggle(cb => cb
-                .setValue(this.settings.I18N_ADMIN_MODE)
-                .onChange(() => {
-                    if (this.settings.I18N_ADMIN_VERIFY) {
-                        this.settings.I18N_ADMIN_MODE = !this.settings.I18N_ADMIN_MODE;
-                        this.i18n.saveSettings();
-                        if (this.settings.I18N_ADMIN_MODE) {
-                            this.i18n.i18nReviewEl = this.i18n.addRibbonIcon('i18n-review', 'I18N审核', (evt: MouseEvent) => { new AdminModal(this.app, this.i18n).open() });
-                        } else {
-                            this.i18n.i18nReviewEl.remove();
-                        }
-                    } else {
-                        this.i18n.notice.result('共建云端', false, '您尚未验证,请先验证');
-                        this.settingTab.shareDisplay();
-                    }
+                } catch (e) {
+                    new Notice(e.message || t('Settings.Share.VerifyError'));
+                    this.settings.shareToken = '';
+                    await this.i18n.saveSettings();
+                    text.setValue('');
+                    tokenSetting.setDesc(t('Settings.Share.ModeDesc'));
+                }
+            });
+        });
+
+        // -- 使用指引 --
+        new Setting(containerEl)
+            .setName(t('Settings.Share.TutorialTitle'))
+            .setDesc(t('Settings.Share.TutorialTip'))
+            .addButton(btn => btn
+                .setButtonText(t('Wizard.Actions.Browse'))
+                .onClick(() => {
+                    window.open('https://github.com/settings/tokens/new?scopes=public_repo&description=Obsidian-i18n-Share');
                 })
-                .toggleEl.addClass('i18n-checkbox')
             );
+
+        // ==============================
+        //        2. 同步配置
+        // ==============================
+        containerEl.createEl('h2', { text: t('Settings.Share.SyncTitle') });
+
+        new Setting(containerEl)
+            .setName(t('Settings.Share.RepoTitle'))
+            .setDesc(t('Settings.Share.RepoDesc'))
+            .addText(text => {
+                text.setValue(this.settings.shareRepo || 'obsidian-translations')
+                    .setPlaceholder('obsidian-translations')
+                    .onChange(async (value) => {
+                        this.settings.shareRepo = value.trim();
+                        await this.i18n.saveSettings();
+                    });
+            });
+
+        // ==============================
+        //        3. 账户管理
+        // ==============================
+        if (this.settings.shareToken) {
+            containerEl.createEl('h2', { text: t('Settings.Share.AccountTitle') });
+            new Setting(containerEl)
+                .setName(t('Settings.Share.LogoutTitle'))
+                .setDesc(t('Settings.Share.LogoutDesc'))
+                .addButton(btn => btn
+                    .setButtonText(t('Settings.Share.LogoutBtn'))
+                    .onClick(async () => {
+                        this.settings.shareToken = '';
+                        this.settings.shareRepo = '';
+                        await this.i18n.saveSettings();
+                        this.display(); // 刷新页面
+                        new Notice(t('Settings.Share.LogoutSuccess'));
+                    })
+                );
+        }
     }
 }

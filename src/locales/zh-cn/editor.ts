@@ -1,0 +1,154 @@
+/**
+ * [模块] 编辑器相关 (Editor)
+ * 合并了 plugin_editor 与 theme_editor，并扁平化了 cards 层级
+ */
+export default {
+    Titles: {
+        Main: "编辑器",
+        Sidebar: "操作面板",
+        Files: "资源管理器",
+        Stats: "条目统计",
+        Insert: "新增项",
+        QuickActions: "快捷操作",
+        Ai: "AI 智能翻译",
+        Ast: "AST 编辑",
+        Regex: "语法校验",
+        Metadata: "元数据"
+    },
+    Labels: {
+        SidebarViewOptions: "视图选项",
+        SidebarShowCards: "显示卡片",
+        SelectLang: "选择语言",
+        CustomLang: "自定义语言",
+        SelectStyle: "选择风格",
+        CustomStyle: "自定义风格",
+        PluginId: "插件ID",
+        ThemeName: "主题名称",
+        PathLabel: "文件路径",
+        PathPlaceholder: "如：styles.css 或 sub/file.js",
+        Name: "名称",
+        NamePlaceholder: "名称",
+        Desc: "描述",
+        DescPlaceholder: "描述",
+        Author: "作者",
+        Lang: "语言",
+        SupportedVer: "支持版本",
+        Ver: "版本",
+        Source: "来源",
+        SourceCloud: "云端",
+        SourceLocal: "本地",
+        Checksum: "校验",
+        BatchSize: "每批数量",
+        Concurrency: "并发限制",
+        Timeout: "超时 (ms)",
+        Overwrite: "覆盖现有译文",
+        ClickToJump: "点击跳转到该行",
+        RealtimeCheck: "实时校验",
+        AutoSave: "自动保存",
+        FontSize: "字体大小",
+        ParenthesesCheck: "括号匹配",
+        VariableCheck: "变量校验",
+        PunctuationCheck: "标点检查"
+    },
+    Actions: {
+        BatchTranslate: "开始批量翻译 ({{count}})",
+        Save: "保存",
+        IncrementalExtract: "增量提取",
+        IncrementalExtractTip: "仅提取新增翻译项",
+        IncrementalExtractDisabledTip: "当前译文已应用，无法进行增量提取",
+        OpenFile: "打开当前文件",
+        OpenFileTip: "在外部编辑器中打开当前文件",
+        Add: "新增",
+        DeleteUntranslated: "清空未翻译项",
+        DeleteUntranslatedTip: "一键删除所有尚未填写译文的条目",
+        Source: "源码",
+        Trans: "译文",
+        Restore: "还原",
+        Settings: "配置",
+        Diagnose: "语法诊断",
+        ClearDiagnose: "清除诊断"
+    },
+    Stats: {
+        Title: "条目统计",
+        Progress: "翻译进度",
+        Overview: "翻译统计",
+        TotalItems: "总条目数",
+        Translated: "已翻译项",
+        Untranslated: "未翻译项"
+    },
+    Ast: {
+        Title: "AST 编辑",
+        AddRule: "新增 AST 规则",
+        SelectTypePlaceholder: "选择节点类型",
+        InputNamePlaceholder: "输入变量名或键名",
+        InputSourcePlaceholder: "输入代码原文",
+        InputTargetPlaceholder: "输入翻译后文本",
+        DefaultPlaceholder: "默认为原文: {{source}}",
+        NodeVariable: "变量申明",
+        NodeAssignment: "赋值语句",
+        NodeProperty: "对象属性",
+        NodeCall: "方法调用",
+        NodeNew: "实例化"
+    },
+    Regex: {
+        Title: "语法校验",
+        Overview: "正则统计",
+        TotalItems: "匹配总数",
+        Translated: "已处理项",
+        Untranslated: "待处理项",
+        AddRule: "新增正则规则",
+        InputRegexPlaceholder: "输入正则表达式",
+        InputTargetPlaceholder: "输入替换目标",
+        DefaultPlaceholder: "默认为原文: {{source}}"
+    },
+    Table: {
+        EmptyState: "暂无翻译条目",
+        EmptyStateAst: "没有找到匹配的 AST 条目",
+        EmptyStateRegex: "未发现待校验的语法条目",
+        ColumnType: "类型",
+        ColumnName: "名称",
+        ColumnSource: "原文",
+        ColumnTarget: "译文",
+        ColumnActions: "操作"
+    },
+    Status: {
+        ProcessingBatch: "正在翻译第 {{current}}/{{total}} 批...",
+        Diagnosing: "正在进行语法诊断...",
+        Applied: "已应用",
+        NotApplied: "未应用",
+        Empty: "暂无条目",
+        IssueCount: "发现 {{count}} 个问题"
+    },
+    Hints: {
+        ExtractSummary: "增量提取完成，新增 {{count}} 个条目",
+        DiagnosisSuccess: "诊断完成：未发现导致语法错误的条目",
+        NoItems: "无可翻译项",
+        NoNewItems: "未发现新的翻译条目"
+    },
+    Notices: {
+        NoticePrefix: "编辑器",
+        SuccessAdd: "新增成功",
+        SuccessAi: "翻译成功",
+        SuccessRestore: "还原成功",
+        SuccessDelete: "删除成功",
+        SuccessIncrementalExtract: "增量提取完成",
+        DiagnosisSuccess: "语法诊断通过"
+    },
+    Errors: {
+        FailExists: "新增失败\n译文中已存在此内容",
+        SyntaxErrorTotal: "诊断完成：发现 {{count}} 个语法错误",
+        SyntaxErrorAst: "AST 提取失败",
+        SyntaxErrorRegex: "正则提取失败",
+        NoMetadata: "未找到元数据，无法进行诊断。",
+        NoManifest: "未找到对应清单，无法定位目录。",
+        NotJs: "当前选择的文件不是 .js 脚本，暂不支持语法诊断。",
+        NoBackup: "诊断异常：未找到对应的备份文件。请先点击一次“替换”以创建基准备份。",
+        SourceError: "源码本身存在语法错误，无法进行诊断。",
+        FileNotFound: "文件不存在",
+        SavePathMissing: "保存路径不存在"
+    },
+    Dialogs: {
+        ConfirmDeletePath: "确认删除该路径？",
+        PromptNewPath: "新增翻译路径"
+    }
+} as const;
