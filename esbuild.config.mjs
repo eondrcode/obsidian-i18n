@@ -59,6 +59,11 @@ const context = await esbuild.context({
     // 构建过程中的日志详细程度。'info' 会输出构建耗时和基本状态信息
     logLevel: "info",
 
+    // 定义全局变量，用于在代码中判断环境
+    define: {
+        "process.env.DEV_MODE": JSON.stringify(!prod),
+    },
+
     /**
      * Source Map 配置：
      * 1. 'inline': 地图信息以 Base64 字符串嵌入在 main.js 结尾（导致文件非常巨大，如 17MB，不建议生产环境使用）。

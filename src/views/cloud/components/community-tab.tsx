@@ -2,7 +2,8 @@
  * 社区目录 Tab
  * 左右分栏布局：左侧排行榜（可折叠） + 右侧全部翻译库卡片网格
  */
-import React, { useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/shadcn';
 import { Search, RefreshCw, Globe, Star, Package, ExternalLink, Users, ArrowRight, Trophy, ChevronDown, TrendingUp, Palette, Library } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -48,12 +49,15 @@ export const CommunityTab: React.FC = () => {
     const [pluginReposOpen, setPluginReposOpen] = useState(true);
     const [authorsOpen, setAuthorsOpen] = useState(true);
 
+    const [isRateLimited, setIsRateLimited] = useState(false);
+
     // 加载社区数据
     const loadCommunityData = useCallback(async (force = false) => {
         if (communityLoading) return;
         if (communityLoaded && !force) return;
 
         setCommunityLoading(true);
+        setIsRateLimited(false);
         try {
             const registryAddr = 'eondrcode/obsidian-i18n-resources';
             if (!registryAddr) return;
@@ -61,37 +65,42 @@ export const CommunityTab: React.FC = () => {
             const [owner, repo] = registryAddr.split('/');
             if (!owner || !repo) return;
 
-            // 并发加载 registry.json 和 stats.json
+            // 并发加载 registry.json 和 stats.json (自动降级以支持大文件和绕过部分频率限制)
             const [registryRes, statsRes] = await Promise.all([
-                i18n.api.github.getFileContent(owner, repo, 'registry.json'),
-                i18n.api.github.getFileContent(owner, repo, 'stats.json'),
+                i18n.api.github.getFileContentWithFallback(owner, repo, 'registry.json'),
+                i18n.api.github.getFileContentWithFallback(owner, repo, 'stats.json'),
             ]);
 
+            // 检查频率限制
+            if (registryRes.isRateLimit || statsRes.isRateLimit) {
+                setIsRateLimited(true);
+            }
+
             // 解析 registry.json
-            if (registryRes.state && registryRes.data?.content) {
-                const decoded = Buffer.from(registryRes.data.content, 'base64').toString('utf-8');
-                const parsed = JSON.parse(decoded);
+            if (registryRes.state && registryRes.data) {
+                const parsed = registryRes.data;
                 if (Array.isArray(parsed)) {
                     setCommunityRegistry(parsed);
                 }
             }
 
             // 解析 stats.json
-            if (statsRes.state && statsRes.data?.content) {
-                const decoded = Buffer.from(statsRes.data.content, 'base64').toString('utf-8');
-                const parsed = JSON.parse(decoded);
+            if (statsRes.state && statsRes.data) {
+                const parsed = statsRes.data;
                 if (parsed && typeof parsed === 'object') {
                     setCommunityStats(parsed);
                 }
             }
 
-            setCommunityLoaded(true);
+            if (registryRes.state || statsRes.state) {
+                setCommunityLoaded(true);
+            }
         } catch (error) {
             console.error(t_i18n('Cloud.Errors.FetchFail'), error);
         } finally {
             setCommunityLoading(false);
         }
-    }, [communityLoading, communityLoaded, i18n, setCommunityRegistry, setCommunityStats, setCommunityLoaded, setCommunityLoading]);
+    }, [communityLoading, communityLoaded, i18n, setCommunityRegistry, setCommunityStats, setCommunityLoaded, setCommunityLoading, t_i18n]);
 
     // 首次挂载自动加载
     React.useEffect(() => {
@@ -200,12 +209,25 @@ export const CommunityTab: React.FC = () => {
         });
     }, [communityRegistry, communityStats, searchQuery, filterLanguage]);
 
+
     // 点击查看仓库
     const handleViewRepo = useCallback((address: string) => {
         setTargetRepoAddress(address);
+
+        // 自动添加到已保存列表
+        const currentSaved = i18n.settings.cloudRepos || [];
+        if (!currentSaved.includes(address)) {
+            const newRepos = [...currentSaved, address];
+            i18n.settings.cloudRepos = newRepos;
+            i18n.saveSettings();
+            useCloudStore.getState().setSavedRepos(newRepos); // 同步到 store
+        }
+
+        // 清空当前列表，触发 ExploreTab 的自动获取逻辑
+        useCloudStore.getState().setTargetManifest([]);
+
         setCurrentTab('download');
-        setTimeout(() => { }, 100);
-    }, [setTargetRepoAddress, setCurrentTab]);
+    }, [setTargetRepoAddress, setCurrentTab, i18n]);
 
     const topAuthors = useMemo(() => {
         return communityStats?.leaderboard?.topAuthors || [];
@@ -223,12 +245,46 @@ export const CommunityTab: React.FC = () => {
         );
     }
 
-    if (!communityLoaded) {
+    if (!communityLoaded && !isRateLimited) {
         return (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Globe className="w-16 h-16 mb-4 opacity-20" />
                 <p className="text-sm font-medium">{t_i18n('Cloud.Errors.FetchFail')}</p>
                 <Button variant="link" size="sm" onClick={() => loadCommunityData(true)} className="mt-2">
+                    {t_i18n('Cloud.Actions.Recheck')}
+                </Button>
+            </div>
+        );
+    }
+
+    if (isRateLimited && communityRegistry.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center p-6 space-y-4 max-w-md mx-auto animate-in fade-in duration-500">
+                <div className="p-4 rounded-full bg-orange-500/10 text-orange-600 ring-1 ring-orange-500/20">
+                    <Globe className="w-10 h-10 opacity-80" />
+                </div>
+                <div className="space-y-2">
+                    <h3 className="text-xl font-bold tracking-tight">
+                        {t_i18n('Cloud.Hints.RateLimitTitle')}
+                    </h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        {t_i18n('Cloud.Hints.RateLimitDesc')}
+                    </p>
+                </div>
+                <Button
+                    onClick={() => {
+                        // @ts-ignore
+                        i18n.app.setting.open();
+                        // @ts-ignore
+                        i18n.app.setting.openTabById('i18n');
+                    }}
+                    className="mt-4 gap-2 px-6 shadow-sm transition-all hover:translate-y-[-1px] bg-orange-500 hover:bg-orange-600 text-white border-none"
+                >
+                    {t_i18n('Cloud.Hints.RateLimitGuide')}
+                    <ArrowRight className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => loadCommunityData(true)} className="text-xs text-muted-foreground">
+                    <RefreshCw className="w-3 h-3 mr-1.5" />
                     {t_i18n('Cloud.Actions.Recheck')}
                 </Button>
             </div>
@@ -625,27 +681,12 @@ export const CommunityTab: React.FC = () => {
                 </div>
 
                 {/* 卡片网格 */}
-                <ScrollArea className="flex-1 min-h-0">
-                    <div className="pb-6 pr-4">
-                        {filteredItems.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border/40">
-                                <Package className="w-12 h-12 mb-4 opacity-10" />
-                                <p className="text-sm font-medium">{t('Cloud.Hints.NoMatchingRepos')}</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-                                {filteredItems.map((item) => (
-                                    <CommunityRepoCard
-                                        key={item.repoAddress}
-                                        item={item}
-                                        stats={communityStats?.repos?.[item.repoAddress]}
-                                        onView={() => handleViewRepo(item.repoAddress)}
-                                    />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </ScrollArea>
+                <CommunityReposList
+                    filteredItems={filteredItems}
+                    communityStats={communityStats}
+                    handleViewRepo={handleViewRepo}
+                    t={t}
+                />
             </main>
         </div>
     );
@@ -758,5 +799,107 @@ const CommunityRepoCard: React.FC<CommunityRepoCardProps> = ({ item, stats, onVi
                 </a>
             </div>
         </div>
+    );
+};
+// ========== 社区仓库列表组件 (独立封装以确保状态重置) ==========
+interface CommunityReposListProps {
+    filteredItems: RegistryItem[];
+    communityStats: any;
+    handleViewRepo: (address: string) => void;
+    t: any;
+}
+
+const CommunityReposList: React.FC<CommunityReposListProps> = ({
+    filteredItems,
+    communityStats,
+    handleViewRepo,
+    t
+}) => {
+    const parentRef = useRef<HTMLDivElement>(null);
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const element = parentRef.current;
+        if (!element) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (let entry of entries) {
+                const width = entry.contentRect.width;
+                if (width > 0) {
+                    setContainerWidth(width);
+                }
+            }
+        });
+
+        resizeObserver.observe(element);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const columns = useMemo(() => {
+        const count = Math.floor((containerWidth - 20 + 16) / (320 + 16));
+        return Math.max(1, count);
+    }, [containerWidth]);
+
+    const rowCount = Math.ceil(filteredItems.length / columns);
+
+    const rowVirtualizer = useVirtualizer({
+        count: rowCount,
+        getScrollElement: () => parentRef.current,
+        estimateSize: useCallback(() => 210, []),
+        overscan: 5,
+    });
+
+    const virtualItems = rowVirtualizer.getVirtualItems();
+
+    return (
+        <ScrollArea className="flex-1 min-h-0" viewportRef={parentRef}>
+            <div className="pb-6 pr-4">
+                {filteredItems.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground bg-muted/10 rounded-xl border border-dashed border-border/40">
+                        <Package className="w-12 h-12 mb-4 opacity-10" />
+                        <p className="text-sm font-medium">{t('Cloud.Hints.NoMatchingRepos')}</p>
+                    </div>
+                ) : (
+                    <div
+                        className="relative w-full overflow-hidden"
+                        style={{
+                            height: `${rowVirtualizer.getTotalSize()}px`,
+                        }}
+                    >
+                        {virtualItems.map((virtualRow) => {
+                            const startIndex = virtualRow.index * columns;
+                            const itemsInRow = filteredItems.slice(startIndex, startIndex + columns);
+
+                            return (
+                                <div
+                                    key={virtualRow.key}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: `${virtualRow.size}px`,
+                                        transform: `translateY(${virtualRow.start}px)`,
+                                        display: 'grid',
+                                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                                        gap: '16px',
+                                        paddingBottom: '16px',
+                                    }}
+                                >
+                                    {itemsInRow.map((item) => (
+                                        <CommunityRepoCard
+                                            key={item.repoAddress}
+                                            item={item}
+                                            stats={communityStats?.repos?.[item.repoAddress]}
+                                            onView={() => handleViewRepo(item.repoAddress)}
+                                        />
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </ScrollArea>
     );
 };

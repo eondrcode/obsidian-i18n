@@ -2,9 +2,10 @@
  * 下载页 Tab
  * 重构：通过输入仓库地址获取翻译列表
  */
-import React, { useCallback, useState, useRef } from 'react';
+import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent } from '@/src/shadcn';
-import { Search, RefreshCw, Download, ExternalLink, User, Package, Globe, Tag, Info, History, X, Clock, Plus, Bookmark, ChevronRight, Star, FileText, MessageSquareWarning, TrendingUp, Palette } from 'lucide-react';
+import { Search, RefreshCw, Download, ExternalLink, User, Package, Globe, Tag, Info, History, X, Clock, Plus, Bookmark, ChevronRight, Star, FileText, MessageSquareWarning, TrendingUp, Palette, ArrowRight, Cpu } from 'lucide-react';
 import { Notice } from 'obsidian';
 import { useTranslation } from 'react-i18next';
 import { useCloudStore } from '../cloud-store';
@@ -47,6 +48,8 @@ export const ExploreTab: React.FC = () => {
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [rightTab, setRightTab] = useState<'plugins' | 'readme' | 'updates'>('plugins');
 
+    const [isRateLimited, setIsRateLimited] = useState(false);
+    const lastFetchedAddressRef = useRef<string | null>(null);
     const outdatedSources = useCloudStore.use.outdatedSources();
     const setOutdatedSources = useCloudStore.use.setOutdatedSources();
     const isCheckingUpdates = useCloudStore.use.isCheckingUpdates();
@@ -68,10 +71,9 @@ export const ExploreTab: React.FC = () => {
             await Promise.all(savedRepos.map(async (address) => {
                 const [owner, repo] = address.split('/');
                 try {
-                    const res = await i18n.api.github.getFileContent(owner, repo, 'metadata.json');
-                    if (res.state && res.data?.content) {
-                        const decoded = Buffer.from(res.data.content, 'base64').toString('utf-8');
-                        const remoteManifest: ManifestEntry[] = JSON.parse(decoded);
+                    const res = await i18n.api.github.getFileContentWithFallback(owner, repo, 'metadata.json');
+                    if (res.state && res.data) {
+                        const remoteManifest: ManifestEntry[] = Array.isArray(res.data) ? res.data : [];
 
                         // 比对本地已安装的来自该仓库的翻译
                         remoteManifest.forEach(remoteEntry => {
@@ -179,12 +181,12 @@ export const ExploreTab: React.FC = () => {
         return 'up_to_date';
     }, [i18n, targetRepoAddress, sourceUpdateTick]);
 
-    // 初始化加载资源站列表
     React.useEffect(() => {
         if (i18n.settings.cloudRepos) {
             setSavedRepos(i18n.settings.cloudRepos);
         }
     }, [i18n.settings.cloudRepos, setSavedRepos]);
+
 
     // 持久化资源站列表
     const persistRepos = useCallback((repos: string[]) => {
@@ -212,6 +214,7 @@ export const ExploreTab: React.FC = () => {
 
         const [owner, repo] = parts;
         const normalizedAddress = `${owner}/${repo}`;
+
         const githubUser = useCloudStore.getState().githubUser;
         const userRepo = i18n.settings.shareRepo;
 
@@ -222,13 +225,17 @@ export const ExploreTab: React.FC = () => {
         }
 
         setIsFetching(true);
+        setIsRateLimited(false);
         try {
-            // 将 getRawContent 换成 getFileContent 以获取更实时的内容（API 节点比 Raw 节点更新更快）
-            const res = await i18n.api.github.getFileContent(owner, repo, 'metadata.json');
-            if (res.state && res.data?.content) {
-                // 解码 Base64 内容
-                const decoded = Buffer.from(res.data.content, 'base64').toString('utf-8');
-                const parsed = JSON.parse(decoded);
+            // 使用新增的 getFileContentWithFallback 以支持超过 1MB 的 metadata.json
+            const res = await i18n.api.github.getFileContentWithFallback(owner, repo, 'metadata.json');
+
+            if (res.isRateLimit) {
+                setIsRateLimited(true);
+            }
+
+            if (res.state && res.data) {
+                const parsed = res.data;
 
                 if (Array.isArray(parsed)) {
                     setTargetManifest(parsed);
@@ -264,10 +271,11 @@ export const ExploreTab: React.FC = () => {
             }).catch(() => setTargetRepoStars(null));
 
             // [新增] 异步获取 README.md
-            i18n.api.github.getFileContent(owner, repo, 'README.md').then(readmeRes => {
-                if (readmeRes.state && readmeRes.data?.content) {
-                    const decoded = Buffer.from(readmeRes.data.content, 'base64').toString('utf-8');
-                    setTargetRepoReadme(decoded);
+            i18n.api.github.getFileContentWithFallback(owner, repo, 'README.md').then(readmeRes => {
+                if (readmeRes.state && readmeRes.data) {
+                    // 如果返回的是 JSON (经过 fallback 自动解析)，转成文本显示
+                    const content = typeof readmeRes.data === 'string' ? readmeRes.data : JSON.stringify(readmeRes.data, null, 2);
+                    setTargetRepoReadme(content);
                 } else {
                     setTargetRepoReadme(null);
                 }
@@ -285,6 +293,17 @@ export const ExploreTab: React.FC = () => {
         }
     }, [targetRepoAddress, i18n, setTargetManifest, addSavedRepo, savedRepos, persistRepos, setTargetRepoStars, setTargetRepoReadme, t_i18n]);
 
+    /**
+     * [新增] 自动抓取逻辑
+     * 当地址变更时，无论是否有缓存，都触发后台重新验证 (Stale-While-Revalidate)
+     */
+    useEffect(() => {
+        if (targetRepoAddress && targetRepoAddress !== lastFetchedAddressRef.current && !isFetching) {
+            lastFetchedAddressRef.current = targetRepoAddress;
+            handleFetchManifest();
+        }
+    }, [targetRepoAddress, isFetching, handleFetchManifest]);
+
     const handleQuickLoad = useCallback((address: string) => {
         if (address !== targetRepoAddress) {
             setTargetManifest([]);
@@ -295,7 +314,7 @@ export const ExploreTab: React.FC = () => {
         setTargetRepoAddress(address);
         // 直接触发获取逻辑，不再依赖 DOM 点击，避开 Shadow DOM 限制
         handleFetchManifest(address);
-    }, [targetRepoAddress, setTargetRepoAddress, handleFetchManifest, setTargetManifest, setTargetRepoStars, setTargetRepoReadme]);
+    }, [targetRepoAddress, setTargetRepoAddress, handleFetchManifest, setTargetManifest, setTargetRepoStars, setTargetRepoReadme, i18n]);
 
     const handleRemoveRepo = useCallback((e: React.MouseEvent, address: string) => {
         e.stopPropagation();
@@ -313,6 +332,7 @@ export const ExploreTab: React.FC = () => {
         return true;
     });
 
+
     // 下载翻译（支持更新已存在的翻译源）
     const handleDownload = useCallback(async (entry: ManifestEntry) => {
         const parts = targetRepoAddress.trim().split('/');
@@ -322,15 +342,15 @@ export const ExploreTab: React.FC = () => {
 
         setDownloadingId(entry.id);
         try {
-            // 1. 获取翻译文件内容 (使用 getFileContent 绕开 Raw 节点的 CDN 缓存)
-            const fileRes = await i18n.api.github.getFileContent(owner, repo, getCloudFilePath(entry.id, entry.type));
-            if (!fileRes.state || !fileRes.data?.content) {
-                throw new Error(t_i18n('Cloud.Errors.DownloadFail'));
+            // 1. 获取翻译文件内容 (使用 getFileContentWithFallback 支持大文件并避开 CDN 缓存或 403 问题)
+            const fileRes = await i18n.api.github.getFileContentWithFallback(owner, repo, getCloudFilePath(entry.id, entry.type));
+            if (!fileRes.state || !fileRes.data) {
+                const errorDetail = fileRes.isRateLimit ? t_i18n('Cloud.Hints.RateLimitTitle') : (fileRes.data?.message || fileRes.data || '');
+                throw new Error(`${t_i18n('Cloud.Errors.DownloadFail')}: ${errorDetail}`);
             }
 
-            // 解码 Base64 内容并解析为对象（避免 saveSourceFile 再次 stringify 导致双重序列化）
-            const rawContent = Buffer.from(fileRes.data.content, 'base64').toString('utf-8');
-            const content = JSON.parse(rawContent);
+            // getFileContentWithFallback 会自动解析 JSON 或返回文本
+            const content = typeof fileRes.data === 'string' ? JSON.parse(fileRes.data) : fileRes.data;
             const manager = i18n.sourceManager;
             if (!manager) {
                 throw new Error(t_i18n('Cloud.Status.Fetching')); // Or something more appropriate
@@ -643,47 +663,17 @@ export const ExploreTab: React.FC = () => {
 
                     {/* 翻译列表 Tab Content */}
                     <TabsContent value="plugins" className="flex-1 min-h-0 m-0 outline-none data-[state=active]:flex flex-col relative z-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <ScrollArea className="flex-1 min-h-0">
-                            <div className="pb-6 pr-4">
-                                {isFetching ? (
-                                    <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground animate-in fade-in duration-300">
-                                        <RefreshCw className="w-10 h-10 animate-spin text-primary/50 mb-4" />
-                                        <p className="text-sm font-medium tracking-tight">{t_i18n('Cloud.Labels.FetchingResources')}</p>
-                                    </div>
-                                ) : targetManifest.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground animate-in fade-in duration-700">
-                                        <div className="p-10 rounded-full bg-primary/5 mb-6 ring-1 ring-primary/10">
-                                            <Package className="w-20 h-20 opacity-20 text-primary" />
-                                        </div>
-                                        <h3 className="text-xl font-bold text-foreground/80 tracking-tight">{t_i18n('Cloud.Labels.DiscoverTranslations')}</h3>
-                                        <p className="text-sm mt-2 text-center text-muted-foreground/60 max-w-[320px] leading-relaxed">
-                                            {t_i18n('Cloud.Tips.DiscoverDesc')}
-                                        </p>
-                                    </div>
-                                ) : filteredEntries.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground">
-                                        <Search className="w-14 h-14 mb-4 opacity-20" />
-                                        <p className="text-sm font-medium">{t_i18n('Cloud.Tips.NoMatchesInRepo')}</p>
-                                        <Button variant="link" size="sm" onClick={() => { setFilterQuery(''); setFilterLanguage('zh-cn'); }} className="mt-2 text-primary/60">
-                                            {t_i18n('Cloud.Actions.ClearFilters')}
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
-                                        {filteredEntries.map((entry) => (
-                                            <ManifestEntryCard
-                                                key={entry.id}
-                                                entry={entry}
-                                                onDownload={() => handleDownload(entry)}
-                                                isDownloading={downloadingId === entry.id}
-                                                updateStatus={getUpdateStatus(entry)}
-                                                repoAddress={targetRepoAddress}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </ScrollArea>
+                        <ManifestEntriesList
+                            filteredEntries={filteredEntries}
+                            handleDownload={handleDownload}
+                            downloadingId={downloadingId}
+                            getUpdateStatus={getUpdateStatus}
+                            targetRepoAddress={targetRepoAddress}
+                            isFetching={isFetching}
+                            isRateLimited={isRateLimited}
+                            targetManifest={targetManifest}
+                            t_i18n={t_i18n}
+                        />
                     </TabsContent>
 
                     {/* README 介绍 Tab Content */}
@@ -952,6 +942,12 @@ const ManifestEntryCard: React.FC<ManifestEntryCardProps> = ({ entry, onDownload
                                 {new Date(entry.updated_at).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })}
                             </span>
                         )}
+                        {entry.supported_versions && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded cursor-default border border-primary/10">
+                                <Cpu className="w-3 h-3 shrink-0 opacity-50" />
+                                {t_i18n('Cloud.Labels.SupportedVersions')}: {entry.supported_versions}
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>
@@ -989,5 +985,155 @@ const ManifestEntryCard: React.FC<ManifestEntryCardProps> = ({ entry, onDownload
                 </button>
             </div>
         </div>
+    );
+};
+// ========== 资源列表组件 (独立封装以确保状态重置) ==========
+interface ManifestEntriesListProps {
+    filteredEntries: ManifestEntry[];
+    handleDownload: (entry: ManifestEntry) => void;
+    downloadingId: string | null;
+    getUpdateStatus: (entry: ManifestEntry) => UpdateStatus;
+    targetRepoAddress: string;
+    isFetching: boolean;
+    isRateLimited: boolean;
+    targetManifest: ManifestEntry[];
+    t_i18n: any;
+}
+
+const ManifestEntriesList: React.FC<ManifestEntriesListProps> = ({
+    filteredEntries,
+    handleDownload,
+    downloadingId,
+    getUpdateStatus,
+    targetRepoAddress,
+    isFetching,
+    isRateLimited,
+    targetManifest,
+    t_i18n
+}) => {
+    const parentRef = useRef<HTMLDivElement>(null);
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const element = parentRef.current;
+        if (!element) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (let entry of entries) {
+                const width = entry.contentRect.width;
+                if (width > 0) {
+                    setContainerWidth(width);
+                }
+            }
+        });
+
+        resizeObserver.observe(element);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const columns = useMemo(() => {
+        const count = Math.floor((containerWidth - 20 + 16) / (320 + 16));
+        return Math.max(1, count);
+    }, [containerWidth]);
+
+    const rowCount = Math.ceil(filteredEntries.length / columns);
+
+    const rowVirtualizer = useVirtualizer({
+        count: rowCount,
+        getScrollElement: () => parentRef.current,
+        estimateSize: useCallback(() => 180, []),
+        overscan: 5,
+    });
+
+    const virtualItems = rowVirtualizer.getVirtualItems();
+
+    return (
+        <ScrollArea className="flex-1 min-h-0" viewportRef={parentRef}>
+            <div className="pb-6 pr-4">
+                {isFetching ? (
+                    <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground animate-in fade-in duration-300">
+                        <RefreshCw className="w-10 h-10 animate-spin text-primary/50 mb-4" />
+                        <p className="text-sm font-medium tracking-tight">{t_i18n('Cloud.Labels.FetchingResources')}</p>
+                    </div>
+                ) : filteredEntries.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center pt-32 text-muted-foreground">
+                        <Search className="w-14 h-14 mb-4 opacity-20" />
+                        <p className="text-sm font-medium">{t_i18n('Cloud.Tips.NoMatchesInRepo')}</p>
+                    </div>
+                ) : containerWidth === 0 ? (
+                    <div className="flex items-center justify-center pt-32 text-muted-foreground animate-in fade-in duration-300">
+                        <RefreshCw className="w-8 h-8 animate-spin text-primary/30" />
+                    </div>
+                ) : (
+                    <div
+                        className="relative w-full overflow-hidden"
+                        style={{
+                            height: `${rowVirtualizer.getTotalSize()}px`,
+                        }}
+                    >
+                        {virtualItems.map((virtualRow) => {
+                            const startIndex = virtualRow.index * columns;
+                            const itemsInRow = filteredEntries.slice(startIndex, startIndex + columns);
+
+                            return (
+                                <div
+                                    key={virtualRow.key}
+                                    style={{
+                                        position: 'absolute',
+                                        top: 0,
+                                        left: 0,
+                                        width: '100%',
+                                        height: `${virtualRow.size}px`,
+                                        transform: `translateY(${virtualRow.start}px)`,
+                                        display: 'grid',
+                                        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                                        gap: '16px',
+                                        paddingBottom: '16px',
+                                    }}
+                                >
+                                    {itemsInRow.map((entry) => (
+                                        <ManifestEntryCard
+                                            key={entry.id}
+                                            entry={entry}
+                                            onDownload={() => handleDownload(entry)}
+                                            isDownloading={downloadingId === entry.id}
+                                            updateStatus={getUpdateStatus(entry)}
+                                            repoAddress={targetRepoAddress}
+                                        />
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+            {isRateLimited && targetManifest.length === 0 && (
+                <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="p-4 rounded-full bg-orange-500/10 text-orange-600 ring-1 ring-orange-500/20">
+                        <Globe className="w-10 h-10 opacity-80" />
+                    </div>
+                    <div className="space-y-2">
+                        <h3 className="text-xl font-bold tracking-tight">
+                            {t_i18n('Cloud.Hints.RateLimitTitle')}
+                        </h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed max-w-sm">
+                            {t_i18n('Cloud.Hints.RateLimitDesc')}
+                        </p>
+                    </div>
+                    <Button
+                        onClick={() => {
+                            // @ts-ignore
+                            i18n.app.setting.open();
+                            // @ts-ignore
+                            i18n.app.setting.openTabById('i18n');
+                        }}
+                        className="mt-4 gap-2 px-6 shadow-sm transition-all hover:translate-y-[-1px] bg-orange-500 hover:bg-orange-600 text-white border-none"
+                    >
+                        {t_i18n('Cloud.Hints.RateLimitGuide')}
+                        <ArrowRight className="w-4 h-4" />
+                    </Button>
+                </div>
+            )}
+        </ScrollArea>
     );
 };

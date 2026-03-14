@@ -20,7 +20,7 @@ export class GitHubAPI {
     /** 主仓库拥有者（用于获取翻译目录等） */
     owner = 'eondrcode';
     /** 主仓库名 */
-    repo = 'obsidian-translations';
+    repo = 'obsidian-i18n-resources';
 
     /** 获取用户配置的个人翻译仓库名 */
     get userRepo(): string {
@@ -48,10 +48,18 @@ export class GitHubAPI {
         return headers;
     }
 
+    private wrapError(error: any): { state: false; data: any; isRateLimit: boolean } {
+        const isRateLimit = !!(error?.status === 403 && (error?.text?.includes('rate limit') || error?.json?.message?.includes('rate limit')));
+        return { state: false, data: error, isRateLimit };
+    }
+
     // ========== 用户信息 ==========
 
     /** 获取当前 Token 对应的 GitHub 用户信息 */
-    public async getUser() {
+    public async getUser(): Promise<
+        { state: true; data: any; scopes: string[] } | 
+        { state: false; data: any; isRateLimit?: boolean }
+    > {
         try {
             const params: RequestUrlParam = {
                 url: `https://api.github.com/user`,
@@ -60,14 +68,16 @@ export class GitHubAPI {
             };
             const response = await requestUrl(params);
             // 从响应头解析权限范围
-            const scopes = response.headers['x-oauth-scopes'] || '';
+            const scopesStr = response.headers['x-oauth-scopes'] || '';
+            const scopes = scopesStr.split(',').map((s: string) => s.trim()).filter(Boolean);
+            
             return {
                 state: true,
                 data: response.json,
-                scopes: scopes.split(',').map((s: string) => s.trim())
+                scopes: scopes
             };
-        } catch (error) {
-            return { state: false, data: error };
+        } catch (error: any) {
+            return this.wrapError(error);
         }
     }
 
@@ -203,6 +213,62 @@ export class GitHubAPI {
         } catch (error) {
             return { state: false, data: error };
         }
+    }
+
+    /**
+     * 获取文件内容（带大文件降级）
+     * 对于超过 1MB 的文件，Contents API 不返回 content 字段，
+     * 此方法会自动降级到 raw.githubusercontent.com 节点。
+     * 返回的 data 直接是解析后的 JSON 对象（如果文件是 JSON），或者是文本内容。
+     */
+    public async getFileContentWithFallback(
+        owner: string, repo: string, path: string, branch: string = 'main'
+    ): Promise<{ state: boolean; data: any; isRateLimit?: boolean }> {
+        // 策略 1: 先尝试普通 Contents API（带 Auth）
+        try {
+            const res = await this.getFileContent(owner, repo, path, branch);
+            if (res.state && res.data) {
+                // 如果有 content 字段，直接解码返回
+                if (res.data.content) {
+                    const decoded = Buffer.from(res.data.content, 'base64').toString('utf-8');
+                    try {
+                        return { state: true, data: JSON.parse(decoded) };
+                    } catch {
+                        return { state: true, data: decoded };
+                    }
+                }
+                // 大文件场景：虽然 Contents API 成功，但没有 content 字段（通常会有 download_url）
+                if (res.data.download_url) {
+                    const rawRes = await requestUrl({ url: res.data.download_url, method: 'GET' });
+                    return { state: true, data: rawRes.json || rawRes.text };
+                }
+            } else if (res.data?.status === 403) {
+                // 可能是频率限制，记录状态但继续尝试 Raw 降级
+                const isRateLimit = res.data?.text?.includes('rate limit') || res.data?.json?.message?.includes('rate limit');
+                if (isRateLimit) {
+                    // 如果是频率限制且没有 Token，API 大概率会一直失败，直接尝试 Raw
+                }
+            }
+        } catch (e) {
+            // 继续尝试下一种方案
+        }
+
+        // 策略 2: 通过 raw.githubusercontent.com 直接获取（避开 Contents API 1MB 限制和某些 403）
+        try {
+            const rawRes = await this.getRawContent(owner, repo, path, branch);
+            if (rawRes.state && rawRes.data) {
+                return { state: true, data: rawRes.data };
+            }
+            
+            // 如果 Raw 也失败了，且之前有 API 失败记录，检查是否是频率限制
+            if (rawRes.data?.status === 403 || rawRes.data?.status === 429) {
+                 return { state: false, data: rawRes.data, isRateLimit: true };
+            }
+        } catch (e) {
+            // raw 节点也失败
+        }
+
+        return { state: false, data: 'Cannot fetch file content' };
     }
 
     /**
@@ -356,7 +422,7 @@ export class GitHubAPI {
     public async getTranslation(type: string, id: string, version: string) {
         try {
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/refs/heads/master/translation/dict/${id}/zh-cn/${version}.json`,
+                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/dict/${id}/zh-cn/${version}.json`,
                 method: 'GET',
             };
             const response = await requestUrl(params);
@@ -370,7 +436,7 @@ export class GitHubAPI {
     public async getDirectory(type: string) {
         try {
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/refs/heads/master/translation/directory/zh-cn.json`,
+                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/directory/zh-cn.json`,
                 method: 'GET',
             };
             const response = await requestUrl(params);
@@ -388,7 +454,7 @@ export class GitHubAPI {
             // 注意：raw.githubusercontent.com 有 5 分钟 CDN 缓存
             // 我们通过添加随机参数尝试强制刷新，但在某些情况下仍可能受限
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${path}?t=${Date.now()}`,
+                url: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`,
                 method: 'GET',
             };
             const response = await requestUrl(params);
@@ -547,6 +613,161 @@ export class GitHubAPI {
             return { state: true, data: response.json };
         } catch (error) {
             console.error('GitHub getRepoTree error:', error);
+            return { state: false, data: error };
+        }
+    }
+
+    /**
+     * 获取引用 (Ref) 的详细信息，主要是为了拿到最新的 Commit SHA
+     */
+    public async getRef(owner: string, repo: string, ref: string = 'heads/main'): Promise<{ state: boolean; data: any }> {
+        try {
+            const params: RequestUrlParam = {
+                url: `https://api.github.com/repos/${owner}/${repo}/git/refs/${ref}?t=${Date.now()}`,
+                method: 'GET',
+                headers: this.authHeaders(),
+            };
+            const response = await requestUrl(params);
+            return { state: true, data: response.json };
+        } catch (error) {
+            return { state: false, data: error };
+        }
+    }
+
+    /**
+     * 创建一个新的 Tree 对象
+     * @param treeData 
+     * [
+     *   {
+     *     "path": "file.rb",
+     *     "mode": "100644",
+     *     "type": "blob",
+     *     "content": "..."
+     *   }
+     * ]
+     */
+    public async createTree(owner: string, repo: string, baseTree: string, treeData: any[]): Promise<{ state: boolean; data: any }> {
+        try {
+            const params: RequestUrlParam = {
+                url: `https://api.github.com/repos/${owner}/${repo}/git/trees`,
+                method: 'POST',
+                headers: {
+                    ...this.authHeaders(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    base_tree: baseTree,
+                    tree: treeData
+                }),
+            };
+            const response = await requestUrl(params);
+            return { state: true, data: response.json };
+        } catch (error) {
+            return { state: false, data: error };
+        }
+    }
+
+    /**
+     * 创建一个新的 Commit 对象
+     */
+    public async createCommit(owner: string, repo: string, message: string, tree: string, parents: string[]): Promise<{ state: boolean; data: any }> {
+        try {
+            const params: RequestUrlParam = {
+                url: `https://api.github.com/repos/${owner}/${repo}/git/commits`,
+                method: 'POST',
+                headers: {
+                    ...this.authHeaders(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message,
+                    tree,
+                    parents
+                }),
+            };
+            const response = await requestUrl(params);
+            return { state: true, data: response.json };
+        } catch (error) {
+            return { state: false, data: error };
+        }
+    }
+
+    /**
+     * 更新引用指向新的 Commit
+     */
+    public async updateRef(owner: string, repo: string, ref: string, sha: string): Promise<{ state: boolean; data: any }> {
+        try {
+            const params: RequestUrlParam = {
+                url: `https://api.github.com/repos/${owner}/${repo}/git/refs/${ref}`,
+                method: 'PATCH',
+                headers: {
+                    ...this.authHeaders(),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sha,
+                    force: false // 默认不强制，保证安全
+                }),
+            };
+            const response = await requestUrl(params);
+            return { state: true, data: response.json };
+        } catch (error) {
+            return { state: false, data: error };
+        }
+    }
+
+    /**
+     * 批量上传文件封装函数
+     * @param files 数组，每个元素包含 path 和 content (UTF-8 字符串)
+     */
+    public async batchUploadFiles(
+        owner: string,
+        repo: string,
+        files: { path: string; content: string }[],
+        message: string,
+        branch: string = 'main'
+    ): Promise<{ state: boolean; data: any }> {
+        try {
+            if (!this.token) return { state: false, data: '请先在设置中配置 GitHub Token' };
+            if (files.length === 0) return { state: true, data: 'no files to upload' };
+
+            // 1. 获取最新 Commit
+            const refRes = await this.getRef(owner, repo, `heads/${branch}`);
+            if (!refRes.state) return { state: false, data: `获取分支信息失败: ${refRes.data}` };
+            const lastCommitSha = refRes.data.object.sha;
+
+            // 2. 获取该 Commit 的 Tree SHA
+            const commitDetailParams: RequestUrlParam = {
+                url: `https://api.github.com/repos/${owner}/${repo}/git/commits/${lastCommitSha}`,
+                method: 'GET',
+                headers: this.authHeaders(),
+            };
+            const commitDetailRes = await requestUrl(commitDetailParams);
+            const baseTreeSha = commitDetailRes.json.tree.sha;
+
+            // 3. 创建新的 Tree
+            const treeItems = files.map(f => ({
+                path: f.path,
+                mode: '100644', // 普通文本文件
+                type: 'blob',
+                content: f.content
+            }));
+            const newTreeRes = await this.createTree(owner, repo, baseTreeSha, treeItems);
+            if (!newTreeRes.state) return { state: false, data: `创建 Tree 失败: ${newTreeRes.data}` };
+            const newTreeSha = newTreeRes.data.sha;
+
+            // 4. 创建新 Commit
+            const newCommitRes = await this.createCommit(owner, repo, message, newTreeSha, [lastCommitSha]);
+            if (!newCommitRes.state) return { state: false, data: `创建 Commit 失败: ${newCommitRes.data}` };
+            const newCommitSha = newCommitRes.data.sha;
+
+            // 5. 更新 Ref
+            const updateRefRes = await this.updateRef(owner, repo, `heads/${branch}`, newCommitSha);
+            if (!updateRefRes.state) return { state: false, data: `更新引用失败: ${updateRefRes.data}` };
+
+            return { state: true, data: updateRefRes.data };
+        } catch (error) {
+            console.error('GitHub batchUploadFiles error:', error);
             return { state: false, data: error };
         }
     }

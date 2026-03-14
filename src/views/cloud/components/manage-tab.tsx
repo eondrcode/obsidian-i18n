@@ -2,9 +2,10 @@
  * 我的翻译页 Tab
  * 重构：直接从 store 中读取 repoManifest（由父组件统一加载），支持编辑（跳回上传页）和删除（修改 manifest 并删除远端文件）
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Textarea } from '@/src/shadcn';
-import { Trash2, FolderOpen, AlertCircle, Loader2, Edit3, Package, Clock, Tag, RefreshCcw, Search, Globe, Download, Star, FileText, Save, Users, History, Cloud, HardDrive, Upload, Palette, Plus, CheckCircle2 } from 'lucide-react';
+import { Trash2, FolderOpen, AlertCircle, Loader2, Edit3, Package, Clock, Tag, RefreshCcw, Search, Globe, Download, Star, FileText, Save, Users, History, Cloud, HardDrive, Upload, Palette, Plus, CheckCircle2, Cpu } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useCloudStore } from '../cloud-store';
@@ -76,9 +77,26 @@ export const ManageTab: React.FC = () => {
     const [isCheckingPending, setIsCheckingPending] = useState(false);
     const isRegistered = communityStats?.repos[`${githubUser?.login}/${userRepo}`] !== undefined;
 
+    // 跳转至上传 Tab 的 Action
+    const setCurrentTab = useCloudStore.use.setCurrentTab();
+    const setSelectedPluginId = useCloudStore.use.setSelectedPluginId();
+    const setUploadForm = useCloudStore.use.setUploadForm();
+
+    const setSelectedSourceId = useCloudStore.use.setSelectedSourceId();
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+    // 历史回滚
+    const setHistoryDialogEntryId = useCloudStore.use.setHistoryDialogEntryId();
+    // 备份/恢复
+
     // 初始化仓库（创建新仓库或使用已有仓库）
     const handleInitRepo = useCallback(async (mode: 'create' | 'use-existing') => {
-        const repoName = repoNameInput.trim();
+        let repoName = repoNameInput.trim();
+        // 自动提取 repo name (支持 owner/repo 格式输入)
+        if (repoName.includes('/')) {
+            repoName = repoName.split('/').pop() || '';
+        }
+
         if (!repoName) {
             i18n.notice.errorPrefix(t('Cloud.Errors.InitFailed'), t('Cloud.Hints.RepoNameRequired'));
             return;
@@ -131,7 +149,7 @@ export const ManageTab: React.FC = () => {
             i18n.settings.shareRepo = repoName;
             await i18n.saveSettings();
 
-            i18n.notice.successPrefix(t('Cloud.Notices.RepoReady'), t('Cloud.Notices.RepoReadyPrefix'));
+            i18n.notice.successPrefix(t('Cloud.Notices.UploadSuccess'), t('Cloud.Notices.RepoReadyPrefix'));
             setRepoInitialized(true);
 
             // 触发重新加载 manifest 数据
@@ -178,10 +196,6 @@ export const ManageTab: React.FC = () => {
         checkPending();
         return () => { cancelled = true; };
     }, [githubUser, userRepo, isRegistered, i18n]);
-
-    if (!i18n.settings.shareToken) {
-        return <LoginRequired />;
-    }
 
     // 注册到社区
     const handleRegisterToCommunity = useCallback(async () => {
@@ -307,18 +321,6 @@ export const ManageTab: React.FC = () => {
         }
     }, [githubUser, userRepo, readmeDraft, i18n, setMyRepoReadme]);
 
-    // 跳转至上传 Tab 的 Action
-    const setCurrentTab = useCloudStore.use.setCurrentTab();
-    const setSelectedPluginId = useCloudStore.use.setSelectedPluginId();
-    const setUploadForm = useCloudStore.use.setUploadForm();
-
-    const setSelectedSourceId = useCloudStore.use.setSelectedSourceId();
-    const [downloadingId, setDownloadingId] = useState<string | null>(null);
-
-    // 历史回滚
-    const setHistoryDialogEntryId = useCloudStore.use.setHistoryDialogEntryId();
-    // 备份/恢复
-
     // 进入编辑/更新模式
     const handleEdit = useCallback((entry: ManifestEntry) => {
         setSelectedPluginId(entry.plugin);
@@ -401,19 +403,19 @@ export const ManageTab: React.FC = () => {
 
         try {
             const username = githubUser.login;
-            const fileRes = await i18n.api.github.getFileContent(
+            const fileRes = await i18n.api.github.getFileContentWithFallback(
                 username,
                 userRepo,
                 getCloudFilePath(entry.id, entry.type)
             );
 
-            if (!fileRes.state || !fileRes.data?.content) {
-                throw new Error(t('Cloud.Errors.DownloadFail'));
+            if (!fileRes.state || !fileRes.data) {
+                const errorDetail = fileRes.isRateLimit ? t('Cloud.Hints.RateLimitTitle') : (fileRes.data?.message || fileRes.data || '');
+                throw new Error(`${t('Cloud.Errors.DownloadFail')}: ${errorDetail}`);
             }
 
-            // 解码并解析 JSON
-            const rawContent = Buffer.from(fileRes.data.content, 'base64').toString('utf-8');
-            const content = JSON.parse(rawContent);
+            // getFileContentWithFallback 会自动解析 JSON 或返回文本
+            const content = typeof fileRes.data === 'string' ? JSON.parse(fileRes.data) : fileRes.data;
 
             const manager = i18n.sourceManager;
             if (!manager) {
@@ -496,6 +498,10 @@ export const ManageTab: React.FC = () => {
         }
     }, [i18n, sourceUpdateTick]);
 
+    if (!i18n.settings.shareToken) {
+        return <LoginRequired />;
+    }
+
     // 过滤 manifest 条目
     const filteredEntries = repoManifest.filter((entry) => {
         if (filterLanguage && filterLanguage !== 'all' && entry.language !== filterLanguage) return false;
@@ -503,6 +509,7 @@ export const ManageTab: React.FC = () => {
             !entry.title.toLowerCase().includes(filterQuery.toLowerCase())) return false;
         return true;
     });
+
 
     // ========== 渲染逻辑 ==========
 
@@ -545,7 +552,7 @@ export const ManageTab: React.FC = () => {
                             <Input
                                 value={repoNameInput}
                                 onChange={(e: any) => setRepoNameInput(e.target.value)}
-                                placeholder="obsidian-translations"
+                                placeholder="obsidian-i18n-resources"
                                 className="font-mono text-sm"
                             />
                             {githubUser && (
@@ -832,51 +839,19 @@ export const ManageTab: React.FC = () => {
 
                     {/* 翻译资源列表 */}
                     <TabsContent value="plugins" className="flex-1 min-h-0 m-0 outline-none data-[state=active]:flex flex-col relative z-10">
-                        <ScrollArea className="flex-1 min-h-0 pr-2">
-                            {repoManifest.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground animate-in fade-in duration-700">
-                                    <div className="p-4 rounded-full bg-primary/5 mb-1">
-                                        <Package className="w-12 h-12 opacity-30 text-primary" />
-                                    </div>
-                                    <h3 className="text-base font-semibold text-foreground/80">{t('Cloud.Hints.NoPublished')}</h3>
-                                    <p className="text-xs max-w-xs text-center leading-relaxed px-6 opacity-70">
-                                        {t('Cloud.Hints.NoPublishedDesc')}
-                                    </p>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="mt-4 shadow-sm hover:bg-primary hover:text-primary-foreground transition-all"
-                                        onClick={() => setCurrentTab('upload')}
-                                    >
-                                        {t('Cloud.Actions.GoPublish')}
-                                    </Button>
-                                </div>
-                            ) : filteredEntries.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center pt-24 text-muted-foreground">
-                                    <Search className="w-14 h-14 mb-4 opacity-20" />
-                                    <p className="text-sm font-medium">{t('Common.Labels.NoPlugins')}</p>
-                                    <Button variant="link" size="sm" onClick={() => { setFilterQuery(''); setFilterLanguage('all'); }} className="mt-2 text-primary/60">
-                                        {t('Cloud.Actions.ClearFilters')}
-                                    </Button>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-6">
-                                    {filteredEntries.map((entry) => (
-                                        <MyTranslationCard
-                                            key={entry.id}
-                                            entry={entry}
-                                            onEdit={() => handleEdit(entry)}
-                                            onDelete={() => handleDelete(entry)}
-                                            onDownload={() => handleDownload(entry)}
-                                            onHistory={() => { setHistoryDialogEntryId(entry.id); setCurrentTab('history'); }}
-                                            isDeleting={deletingId === entry.id}
-                                            isDownloading={downloadingId === entry.id}
-                                            updateStatus={getUpdateStatus(entry)}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </ScrollArea>
+                        <MyTranslationsList
+                            filteredEntries={filteredEntries}
+                            repoManifest={repoManifest}
+                            handleEdit={handleEdit}
+                            handleDelete={handleDelete}
+                            handleDownload={handleDownload}
+                            setHistoryDialogEntryId={setHistoryDialogEntryId}
+                            setCurrentTab={setCurrentTab}
+                            deletingId={deletingId}
+                            downloadingId={downloadingId}
+                            getUpdateStatus={getUpdateStatus}
+                            t={t}
+                        />
                     </TabsContent>
 
                     {/* 仓库主页(README) */}
@@ -1043,6 +1018,12 @@ const MyTranslationCard: React.FC<MyTranslationCardProps> = ({ entry, onEdit, on
                                 {new Date(entry.updated_at).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })}
                             </span>
                         )}
+                        {entry.supported_versions && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60 bg-muted/50 px-1.5 py-0.5 rounded cursor-default border border-primary/10">
+                                <Cpu className="w-3 h-3 shrink-0 opacity-50" />
+                                {t('Cloud.Labels.SupportedVersions')}: {entry.supported_versions}
+                            </span>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1091,5 +1072,146 @@ const MarkdownViewer = ({ content }: { content: string }) => {
                 {content}
             </ReactMarkdown>
         </div>
+    );
+};
+// ========== 个人翻译列表组件 (独立封装以确保状态重置) ==========
+interface MyTranslationsListProps {
+    filteredEntries: ManifestEntry[];
+    repoManifest: ManifestEntry[];
+    handleEdit: (entry: ManifestEntry) => void;
+    handleDelete: (entry: ManifestEntry) => void;
+    handleDownload: (entry: ManifestEntry) => void;
+    setHistoryDialogEntryId: (id: string | null) => void;
+    setCurrentTab: (tab: any) => void;
+    deletingId: string | null;
+    downloadingId: string | null;
+    getUpdateStatus: (entry: ManifestEntry) => 'up_to_date' | 'update_available' | 'not_downloaded';
+    t: any;
+}
+
+const MyTranslationsList: React.FC<MyTranslationsListProps> = ({
+    filteredEntries,
+    repoManifest,
+    handleEdit,
+    handleDelete,
+    handleDownload,
+    setHistoryDialogEntryId,
+    setCurrentTab,
+    deletingId,
+    downloadingId,
+    getUpdateStatus,
+    t
+}) => {
+    const parentRef = useRef<HTMLDivElement>(null);
+    const [containerWidth, setContainerWidth] = useState(0);
+
+    useEffect(() => {
+        const element = parentRef.current;
+        if (!element) return;
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (let entry of entries) {
+                const width = entry.contentRect.width;
+                if (width > 0) {
+                    setContainerWidth(width);
+                }
+            }
+        });
+
+        resizeObserver.observe(element);
+        return () => resizeObserver.disconnect();
+    }, []);
+
+    const columns = useMemo(() => {
+        const count = Math.floor((containerWidth - 20 + 16) / (320 + 16));
+        return Math.max(1, count);
+    }, [containerWidth]);
+
+    const rowCount = Math.ceil(filteredEntries.length / columns);
+
+    const rowVirtualizer = useVirtualizer({
+        count: rowCount,
+        getScrollElement: () => parentRef.current,
+        estimateSize: useCallback(() => 180, []),
+        overscan: 5,
+    });
+
+    const virtualItems = rowVirtualizer.getVirtualItems();
+
+    return (
+        <ScrollArea className="flex-1 min-h-0 pr-2" viewportRef={parentRef}>
+            {repoManifest.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground animate-in fade-in duration-700">
+                    <div className="p-4 rounded-full bg-primary/5 mb-1">
+                        <Package className="w-12 h-12 opacity-30 text-primary" />
+                    </div>
+                    <h3 className="text-base font-semibold text-foreground/80">{t('Cloud.Hints.NoPublished')}</h3>
+                    <p className="text-xs max-w-xs text-center leading-relaxed px-6 opacity-70">
+                        {t('Cloud.Hints.NoPublishedDesc')}
+                    </p>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 shadow-sm hover:bg-primary hover:text-primary-foreground transition-all"
+                        onClick={() => setCurrentTab('upload')}
+                    >
+                        {t('Cloud.Actions.GoPublish')}
+                    </Button>
+                </div>
+            ) : filteredEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center pt-24 text-muted-foreground">
+                    <Search className="w-14 h-14 mb-4 opacity-20" />
+                    <p className="text-sm font-medium">{t('Common.Labels.NoPlugins')}</p>
+                </div>
+            ) : containerWidth === 0 ? (
+                <div className="flex items-center justify-center pt-24 text-muted-foreground animate-in fade-in duration-300">
+                    <RefreshCcw className="w-8 h-8 animate-spin text-primary/30" />
+                </div>
+            ) : (
+                <div
+                    className="relative w-full overflow-hidden"
+                    style={{
+                        height: `${rowVirtualizer.getTotalSize()}px`,
+                    }}
+                >
+                    {virtualItems.map((virtualRow) => {
+                        const startIndex = virtualRow.index * columns;
+                        const itemsInRow = filteredEntries.slice(startIndex, startIndex + columns);
+
+                        return (
+                            <div
+                                key={virtualRow.key}
+                                style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: `${virtualRow.size}px`,
+                                    transform: `translateY(${virtualRow.start}px)`,
+                                    display: 'grid',
+                                    gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                                    gap: '16px',
+                                    paddingBottom: '16px',
+                                }}
+                            >
+                                {itemsInRow.map((entry) => (
+                                    <MyTranslationCard
+                                        key={entry.id}
+                                        entry={entry}
+                                        onEdit={() => handleEdit(entry)}
+                                        onDelete={() => handleDelete(entry)}
+                                        onDownload={() => handleDownload(entry)}
+                                        onHistory={() => { setHistoryDialogEntryId(entry.id); setCurrentTab('history'); }}
+                                        isDeleting={deletingId === entry.id}
+                                        isDownloading={downloadingId === entry.id}
+                                        updateStatus={getUpdateStatus(entry)}
+                                    />
+                                ))}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </ScrollArea>
     );
 };

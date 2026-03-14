@@ -15,12 +15,14 @@ export class SourceManager {
     private basePath: string;           // i18n插件目录
     private sourcesDir: string;         // translation-sources目录
     private metaPath: string;           // meta.json路径
+    private checkpointPath: string;     // backup-checkpoint.json路径
     private meta: TranslationSourceMeta;
 
     constructor(i18nPluginDir: string) {
         this.basePath = i18nPluginDir;
         this.sourcesDir = path.join(i18nPluginDir, 'translations');
         this.metaPath = path.join(i18nPluginDir, 'metadata.json');
+        this.checkpointPath = path.join(i18nPluginDir, 'backup-checkpoint.json');
         this.meta = this.loadMeta();
     }
 
@@ -153,6 +155,27 @@ export class SourceManager {
             this.meta.sources[source.id] = source;
         }
 
+        this.saveMeta();
+    }
+
+    /**
+     * 批量添加/更新翻译源 (减少磁盘写入)
+     */
+    batchSaveSources(sources: TranslationSource[]): void {
+        const now = Date.now();
+        for (const source of sources) {
+            if (this.meta.sources[source.id]) {
+                this.meta.sources[source.id] = {
+                    ...this.meta.sources[source.id],
+                    ...source,
+                    updatedAt: now
+                };
+            } else {
+                source.createdAt = source.createdAt || now;
+                source.updatedAt = now;
+                this.meta.sources[source.id] = source;
+            }
+        }
         this.saveMeta();
     }
 
@@ -325,6 +348,49 @@ export class SourceManager {
         this.saveSource(translationSource);
 
         return sourceId;
+    }
+
+    // ========== 检查点 (Checkpoint) 管理 ==========
+
+    /**
+     * 保存备份检查点
+     */
+    saveCheckpoint(data: any): void {
+        try {
+            fs.writeJsonSync(this.checkpointPath, {
+                ...data,
+                timestamp: Date.now()
+            }, { spaces: 2 });
+        } catch (error) {
+            console.error('[SourceManager] Failed to save checkpoint:', error);
+        }
+    }
+
+    /**
+     * 加载备份检查点
+     */
+    loadCheckpoint(): any | null {
+        try {
+            if (fs.existsSync(this.checkpointPath)) {
+                return fs.readJsonSync(this.checkpointPath);
+            }
+        } catch (error) {
+            console.error('[SourceManager] Failed to load checkpoint:', error);
+        }
+        return null;
+    }
+
+    /**
+     * 清除备份检查点
+     */
+    clearCheckpoint(): void {
+        try {
+            if (fs.existsSync(this.checkpointPath)) {
+                fs.removeSync(this.checkpointPath);
+            }
+        } catch (error) {
+            console.error('[SourceManager] Failed to clear checkpoint:', error);
+        }
     }
 }
 

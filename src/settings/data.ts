@@ -190,7 +190,7 @@ export const DEFAULT_SETTINGS: I18nSettings = {
         "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
     ],
 
-    cloudRepos: ['obsidian-i18n-repos/awesome-plugins'],
+    cloudRepos: [],
 
     // ==============================
     // 管理器状态持久化

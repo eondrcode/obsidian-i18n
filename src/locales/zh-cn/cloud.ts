@@ -30,7 +30,8 @@ export default {
         ClearFilters: "清除所有过滤器",
         CreateNewRepo: "创建新仓库",
         Delete: "删除",
-        Logout: "退出登录"
+        Logout: "退出登录",
+        ResumeLastBackup: "恢复上次备份"
     },
     Status: {
         Published: "已发布",
@@ -64,12 +65,20 @@ export default {
         UploadingFile: "正在上传翻译文件...",
         UpdatingIndex: "正在更新索引文件...",
         Processing: "正在处理",
+        PreparingData: "正在准备待备份数据...",
+        BulkUploading: "正在批量上传 {{count}} 个文件...",
+        UploadingBatch: "正在上传第 {{current}}/{{total}} 批次...",
+        UploadingBatchLog: "📤 正在上传第 {{current}}/{{total}} 批次 (共 {{count}} 个文件)...",
+        FetchingManifest: "正在获取云端清单...",
+        ResumingBackup: "正在恢复上次中断的备份...",
+        FinalizingLocal: "正在同步本地元数据...",
         Downloading: "正在下载翻译: {{title}}...",
         Done: "✨ 完成",
         ForkAvailable: "来自其他库",
         Cloud: "云端",
         Unknown: "未知版本",
-        Ready: "就绪"
+        Ready: "就绪",
+        GuestMode: "访客模式"
     },
     Titles: {
         NewPublish: "添加发布",
@@ -193,8 +202,10 @@ export default {
         AddTranslationMsg: "feat: add translation {{title}} for {{plugin}}",
         UpdateTranslationMsg: "feat: update translation {{title}} for {{plugin}}",
         UpdateManifestMsg: "chore: update manifest for {{plugin}}",
+        UpdateManifestGlobalMsg: "chore: update metadata.json (global update)",
         BackupCommitMsg: "backup: {{title}} ({{plugin}})",
         BulkBackupMsg: "batch backup: {{count}} items synced",
+        BulkBackupMsgBatch: "batch backup: (chunk {{current}}/{{total}})",
         ViewOnGithubTitle: "在 GitHub 上查看 {{repo}}",
         NoReadmeAdded: "暂无 README 介绍",
         NoReadmeAddedDesc: "您可以点击右上角的编辑按钮，为您的翻译库添加详细的介绍、使用说明或贡献指南。",
@@ -237,12 +248,13 @@ export default {
         ContentHash: "内容指纹",
         ReportIssue: "报告问题",
         IssueTemplateBody: "发现 {{plugin}} 的翻译存在问题...",
+        SupportedVersions: "支持版本号",
         TotalTranslations: "全局总翻译数",
         TotalContributors: "全局总贡献者",
         TotalStars: "星标总计"
     },
     Placeholders: {
-        RepoName: "例如: my-obsidian-translations",
+        RepoName: "例如: my-obsidian-i18n-resources",
         SelectTarget: "点击选择目标 {{type}}...",
         InputRepoPlaceholder: "请输入仓库路径 (owner/repo)",
         SelectSource: "请选择本地源...",
@@ -331,7 +343,10 @@ export default {
         TokenRequired: "请先在设置中配置 GitHub Token（共建云端 → 提交 Token）",
         LoginRequired: "需要登录以访问云端功能",
         LoginRequiredDesc: "请在插件设置中配置具备 public_repo 权限的 GitHub Token。配置完成后，您将可以探索社区资源、发布翻译并参与共建。",
-        GoToSettings: "前往设置"
+        GoToSettings: "前往设置",
+        RateLimitTitle: "GitHub 访问受限",
+        RateLimitDesc: "由于 GitHub 的匿名访问频率限制（每小时 60 次），您目前的访问已达上限。请在设置中配置 GitHub Token 以获得稳定不限速的体验。",
+        RateLimitGuide: "配置 Token 即可解决"
     },
     Notices: {
         UploadSuccess: "上传成功",
@@ -350,10 +365,13 @@ export default {
         FoundLocalSources: "发现 {{count}} 个本地翻译源",
         SkipFileNotFound: "跳过 {{title}}: 本地文件不存在",
         SkipUpToDate: "跳过 {{title}}: 云端已是最新",
+        BackupNoChanges: "没有发现需要备份的新变动",
         UploadSuccessItem: "✅ {{title}} 上传成功",
         BackupCompleteStat: "备份完成: 已上传 {{uploaded}} 个，跳过 {{skipped}} 个",
         BackupSuccessCount: "成功备份了 {{count}} 个翻译包",
+        FoundCheckpoint: "发现上次未完成的备份 ({{date}})",
         FoundCloudSources: "在云端发现 {{count}} 个翻译源",
+        ItemsToUpload: "检测到有 {{count}} 个项目需要上传到云端",
         SkipLocalLatest: "跳过 {{title}}: 本地已是最新",
         RestoreSuccessItem: "✅ {{title}} 恢复成功",
         RestoreCompleteStat: "恢复完成: 已同步 {{restored}} 个，跳过 {{skipped}} 个",

@@ -47,7 +47,7 @@ export const WIZARD_CONFIG: WizardRemoteConfig = {
                     icon: 'Github',
                     titleKey: 'Wizard.Titles.Github',
                     descriptionKey: 'Wizard.Hints.GithubDesc',
-                    action: { type: 'url', value: 'https://github.com/eondrcode/obsidian-translations/issues' },
+                    action: { type: 'url', value: 'https://github.com/eondrcode/obsidian-i18n/issues' },
                 },
                 {
                     type: 'placeholder',

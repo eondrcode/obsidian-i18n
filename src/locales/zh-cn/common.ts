@@ -64,5 +64,11 @@ export default {
     Data: {
         SortAsc: "正序",
         SortDesc: "倒序"
-    }
+    },
+    Pagination: {
+        Label: "分页导航",
+        Prev: "上一页",
+        Next: "下一页"
+    },
+    MoreExpect: "更多期待"
 } as const;

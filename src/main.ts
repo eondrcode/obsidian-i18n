@@ -32,7 +32,7 @@ import { WizardView, WIZARD_VIEW_TYPE } from './views/wizard';
  * Obsidian 国际化翻译插件主类
  */
 export default class I18N extends Plugin {
-    settings: I18nSettings;     // [变量] 总配置文件1
+    settings: I18nSettings;     // [变量] 总配置文件
     css: string;
     sharedStyleSheet?: CSSStyleSheet; // [变量] 构建好后被各视图共享的只读 CSSStyleSheet 对象
     // [核心管理器] - 插件功能模块协调中心
@@ -45,6 +45,8 @@ export default class I18N extends Plugin {
     sourceManager: SourceManager; // [管理器] 翻译源管理器 
     injectorManager: InjectorManager; // [管理器] 注入管理器 
     coreManager: CoreManager; // [管理器] 核心管理器
+    activeSettingTab: string = 'basis'; // [变量] 当前设置页激活的选项卡
+
 
     // [变量] 插件贡献者缓存列表
     contributorCache: Contributor[] | undefined;
@@ -117,6 +119,7 @@ export default class I18N extends Plugin {
 
         // [管理器] 核心管理器
         this.coreManager = new CoreManager(this);
+
     }
 
     /**

@@ -89,7 +89,7 @@ class I18nSettingTab extends PluginSettingTab {
 
             navItemEls.push(itemEl);
 
-            if (index === 0) {
+            if (item.id === this.i18n.activeSettingTab) {
                 itemEl.addClass(...activeItemClass);
                 item.content();
             } else {
@@ -97,6 +97,7 @@ class I18nSettingTab extends PluginSettingTab {
             }
 
             itemEl.addEventListener('click', () => {
+                this.i18n.activeSettingTab = item.id;
                 navItemEls.forEach(el => {
                     el.removeClass(...activeItemClass);
                     el.addClass(...inactiveItemClass);

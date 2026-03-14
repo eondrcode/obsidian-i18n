@@ -40,6 +40,7 @@ const CloudViewContent: React.FC = () => {
     const repoInitialized = useCloudStore.use.repoInitialized();
     const githubUser = useCloudStore.use.githubUser();
     const isForking = useCloudStore.use.isForking();
+    const refreshVersion = useCloudStore.use.refreshVersion();
 
     const setRepoDataLoaded = useCloudStore.use.setRepoDataLoaded();
     const setRepoChecking = useCloudStore.use.setRepoChecking();
@@ -49,6 +50,7 @@ const CloudViewContent: React.FC = () => {
     const setCanCreateRepo = useCloudStore.use.setCanCreateRepo();
     const setMyRepoInfo = useCloudStore.use.setMyRepoInfo();
     const setMyRepoReadme = useCloudStore.use.setMyRepoReadme();
+    const setRepoNameInput = useCloudStore.use.setRepoNameInput();
 
     // 仓库初始化逻辑 — 只在视图首次挂载（或 reset 后）执行一次
     React.useEffect(() => {
@@ -58,6 +60,8 @@ const CloudViewContent: React.FC = () => {
         if (!token) return;
 
         const userRepo = i18n.settings.shareRepo;
+        // 同步输入框初始值
+        setRepoNameInput(userRepo || 'obsidian-i18n-resources');
 
         let cancelled = false;
 
@@ -129,10 +133,9 @@ const CloudViewContent: React.FC = () => {
                 // 5. 如果仓库存在，读取 metadata.json (可选校验)
                 if (repoRes.state) {
                     try {
-                        const res = await i18n.api.github.getFileContent(user.login, userRepo, 'metadata.json');
-                        if (!cancelled && res.state && res.data?.content) {
-                            const decoded = Buffer.from(res.data.content, 'base64').toString('utf-8');
-                            const parsed = JSON.parse(decoded);
+                        const res = await i18n.api.github.getFileContentWithFallback(user.login, userRepo, 'metadata.json');
+                        if (!cancelled && res.state && res.data) {
+                            const parsed = res.data;
                             if (Array.isArray(parsed)) {
                                 setRepoManifest(parsed);
                             }
@@ -153,7 +156,7 @@ const CloudViewContent: React.FC = () => {
 
         init();
         return () => { cancelled = true; };
-    }, [repoDataLoaded, i18n]);
+    }, [repoDataLoaded, i18n, refreshVersion]);
 
     return (
         <div className="flex flex-col h-full w-full bg-background font-sans overflow-hidden">
@@ -200,6 +203,8 @@ const CloudViewContent: React.FC = () => {
                             <div
                                 onClick={() => {
                                     // @ts-ignore
+                                    i18n.activeSettingTab = 'share';
+                                    // @ts-ignore
                                     i18n.app.setting.open();
                                     // @ts-ignore
                                     i18n.app.setting.openTabById("i18n");
@@ -212,7 +217,7 @@ const CloudViewContent: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col pr-1 justify-center whitespace-nowrap">
                                     <span className="font-bold text-[13px] text-foreground/90 leading-none">
-                                        {t('Cloud.Status.Unauthorized')}
+                                        {['community', 'download'].includes(currentTab) ? t('Cloud.Status.GuestMode') : t('Cloud.Status.Unauthorized')}
                                     </span>
                                 </div>
                             </div>

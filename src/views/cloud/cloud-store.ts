@@ -61,7 +61,9 @@ interface CloudState {
 
     // ===== 差异对比 =====
     diffDialogSourceId: string | null;
+    refreshVersion: number;
 }
+
 
 // Store Actions 接口
 interface CloudActions {
@@ -193,7 +195,9 @@ const initialState: CloudState = {
     backupProgress: null,
 
     diffDialogSourceId: null,
+    refreshVersion: 0,
 };
+
 
 // 创建 Store
 const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
@@ -282,6 +286,7 @@ const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
     // 重置 (保留下载页地址簿和当前目标状态)
     reset: () => set((state) => ({
         ...initialState,
+        refreshVersion: state.refreshVersion + 1,
         savedRepos: state.savedRepos,
         targetRepoAddress: state.targetRepoAddress,
         targetManifest: state.targetManifest,

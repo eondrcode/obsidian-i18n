@@ -2,6 +2,7 @@ import { Setting, Notice } from "obsidian";
 import BaseSetting from "../base-setting";
 import { t } from "src/locales";
 import { GitHubAPI } from "src/api/github";
+import { useCloudStore } from "src/views/cloud/cloud-store";
 
 // ==============================
 //           个人云端同步
@@ -46,6 +47,8 @@ export default class I18nShare extends BaseSetting {
 
                         if (hasRepoScope) {
                             tokenSetting.setDesc(`${t('Settings.Share.LoginSuccess')}: @${res.data.login}`);
+                            // 验证成功，重置云端状态以触发刷新
+                            useCloudStore.getState().reset();
                         } else {
                             throw new Error(t('Settings.Share.VerifyInsufficient'));
                         }
@@ -85,8 +88,11 @@ export default class I18nShare extends BaseSetting {
                 text.setValue(this.settings.shareRepo || 'obsidian-translations')
                     .setPlaceholder('obsidian-translations')
                     .onChange(async (value) => {
-                        this.settings.shareRepo = value.trim();
+                        const trimmedValue = value.trim();
+                        this.settings.shareRepo = trimmedValue;
                         await this.i18n.saveSettings();
+                        // 同步更新云端管理页面的输入框状态
+                        useCloudStore.getState().setRepoNameInput(trimmedValue);
                     });
             });
 
@@ -104,6 +110,8 @@ export default class I18nShare extends BaseSetting {
                         this.settings.shareToken = '';
                         this.settings.shareRepo = '';
                         await this.i18n.saveSettings();
+                        // 注销登录，重置云端状态
+                        useCloudStore.getState().reset();
                         this.display(); // 刷新页面
                         new Notice(t('Settings.Share.LogoutSuccess'));
                     })

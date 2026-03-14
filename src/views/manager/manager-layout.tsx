@@ -43,8 +43,8 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
 
     return (
         <div className="flex flex-col h-full bg-background overflow-hidden">
-            <Tabs 
-                defaultValue={i18n.settings.managerTab || 'plugins'} 
+            <Tabs
+                defaultValue={i18n.settings.managerTab || 'plugins'}
                 onValueChange={(val) => {
                     i18n.settings.managerTab = val;
                     i18n.saveSettings();
@@ -121,18 +121,20 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
                                 <TooltipContent>{t('Manager.Actions.Settings')}</TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-
-                        <TooltipProvider>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" className="rounded-none h-9 px-3 hover:bg-muted gap-2 text-xs" onClick={handleReloadI18n} disabled={isReloading}>
-                                        {isReloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                        <span>{isReloading ? t('Manager.Status.Reloading') : t('Manager.Actions.Reload')}</span>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>{t('Manager.Actions.Reload')}</TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        {/* 刷新 (仅开发模式展示) */}
+                        {process.env.DEV_MODE && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" className="rounded-none h-9 px-3 hover:bg-muted gap-2 text-xs" onClick={handleReloadI18n} disabled={isReloading}>
+                                            {isReloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                            <span>{isReloading ? t('Manager.Status.Reloading') : t('Manager.Actions.Reload')}</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{t('Manager.Actions.Reload')}</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
                     </div>
                 </div>
 

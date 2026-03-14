@@ -5,6 +5,6 @@ export default class Url {
     public static VIDEO_TUTORIAL = " https://www.bilibili.com/video/BV1VcxJeNExx/"
     public static DOCUMENTATION_TUTORIAL = "https://github.com/eondrcode/obsidian-i18n"
     public static TASK = "https://github.com/eondrcode/obsidian-i18n/issues"
-    public static GITHUB_ISSUE = "https://github.com/eondrcode/obsidian-i18n-resources/issues";
+    public static GITHUB_ISSUE = "https://github.com/eondrcode/obsidian-i18n/issues";
     public static SDK_URL = "https://download.immersivetranslate.com/immersive-translate-sdk-lite-latest.js"
 }  

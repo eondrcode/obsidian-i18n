@@ -17,6 +17,8 @@ export const LoginRequired: React.FC<LoginRequiredProps> = ({ title, description
         const app = i18n.app;
         try {
             // @ts-ignore
+            i18n.activeSettingTab = 'share';
+            // @ts-ignore
             app.setting.open();
             // @ts-ignore
             app.setting.openTabById('i18n');
