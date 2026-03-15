@@ -226,7 +226,11 @@ export const useThemeTranslation = () => {
             totalBatches,
             targetItems,
             timeout,
-            timeoutError
+            timeoutError,
+            get estimation() {
+                const op = new OpenAITranslationService();
+                return op.estimateTokens(targetItems, 'theme');
+            }
         },
         actions: {
             setLanguage: handleLanguageChange,

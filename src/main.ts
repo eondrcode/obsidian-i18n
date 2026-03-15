@@ -10,7 +10,7 @@ import { t } from './locales';
 import { icons } from '~/utils';
 import commands from './command';
 
-import { APIManager, ViewManager, NoticeManager, StateManager, BackupManager, SourceManager, InjectorManager, CoreManager } from './manager';
+import { APIManager, ViewManager, NoticeManager, StateManager, BackupManager, SourceManager, InjectorManager, CoreManager, ExtractManager } from './manager';
 import { info } from './utils';
 import { OBThemeManifest, Contributor, NameTranslationJSON } from '~/types';
 
@@ -45,6 +45,7 @@ export default class I18N extends Plugin {
     sourceManager: SourceManager; // [管理器] 翻译源管理器 
     injectorManager: InjectorManager; // [管理器] 注入管理器 
     coreManager: CoreManager; // [管理器] 核心管理器
+    extractManager: ExtractManager; // [管理器] 提取助手管理器
     activeSettingTab: string = 'basis'; // [变量] 当前设置页激活的选项卡
 
 
@@ -90,9 +91,60 @@ export default class I18N extends Plugin {
     }
 
     // [配置类] 加载
-    public async loadSettings() { this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()); }
+    public async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        await this.migrateOpenAIProfiles();
+    }
     // [配置类] 保存
     public async saveSettings() { await this.saveData(this.settings); }
+
+    /**
+     * 迁移旧版 OpenAI 配置到多 Profile 结构
+     */
+    private async migrateOpenAIProfiles() {
+        if (this.settings.llmOpenaiProfiles && this.settings.llmOpenaiProfiles.length > 0) {
+            // 确保现有 Profile 拥有新增加的价格字段
+            let modified = false;
+            this.settings.llmOpenaiProfiles.forEach(p => {
+                if (p.useCustomPrice === undefined) {
+                    p.useCustomPrice = false;
+                    p.priceInput = 1.1;
+                    p.priceOutput = 4.4;
+                    modified = true;
+                }
+            });
+            if (modified) await this.saveSettings();
+            return;
+        }
+
+        // 如果没有 Profile 但有旧配置，自动创建一个 Default Profile
+        const hasOldConfig = this.settings.llmOpenaiUrl || this.settings.llmOpenaiKey;
+
+        if (hasOldConfig || this.settings.llmOpenaiProfiles.length === 0) {
+            const defaultProfile = {
+                id: 'default',
+                name: 'Default',
+                url: this.settings.llmOpenaiUrl || '',
+                key: this.settings.llmOpenaiKey || '',
+                model: this.settings.llmOpenaiModel || 'gpt-3.5-turbo',
+                useCustomPrice: this.settings.llmUseCustomPrice || false,
+                priceInput: this.settings.llmPriceInputCustom || 1.1,
+                priceOutput: this.settings.llmPriceOutputCustom || 4.4
+            };
+            this.settings.llmOpenaiProfiles = [defaultProfile];
+            this.settings.llmOpenaiActiveProfileId = 'default';
+
+            // 同步一次当前生效配置
+            this.settings.llmOpenaiUrl = defaultProfile.url;
+            this.settings.llmOpenaiKey = defaultProfile.key;
+            this.settings.llmOpenaiModel = defaultProfile.model;
+            this.settings.llmUseCustomPrice = defaultProfile.useCustomPrice;
+            this.settings.llmPriceInputCustom = defaultProfile.priceInput;
+            this.settings.llmPriceOutputCustom = defaultProfile.priceOutput;
+
+            await this.saveSettings();
+        }
+    }
 
 
     /**
@@ -120,6 +172,8 @@ export default class I18N extends Plugin {
         // [管理器] 核心管理器
         this.coreManager = new CoreManager(this);
 
+        // [管理器] 提取助手管理器 (暂时隐藏)
+        // this.extractManager = new ExtractManager(this);
     }
 
     /**

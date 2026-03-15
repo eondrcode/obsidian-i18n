@@ -3,10 +3,10 @@ import { PluginManifest, Notice } from 'obsidian';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { useTranslation } from 'react-i18next';
-import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal } from 'lucide-react';
+import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal, AlertTriangle } from 'lucide-react';
 import I18N from 'src/main';
 import { PluginTranslationV1 } from 'src/types';
-import { i18nOpen, AstTranslator, RegexTranslator, isValidPluginTranslationV1Format } from '../../../utils';
+import { i18nOpen, isValidPluginTranslationV1Format } from '../../../utils';
 import { loadTranslationFile } from '../../../manager/io-manager';
 import { useGlobalStoreInstance } from '~/utils';
 import { EDITOR_VIEW_TYPE } from '../../../views';
@@ -28,6 +28,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
     DropdownMenuSeparator,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogClose,
 } from '~/shadcn';
 import { cn } from '~/shadcn/lib/utils';
 
@@ -64,6 +71,7 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     const [extracting, setExtracting] = useState(false);
     const [replacing, setReplacing] = useState(false);
     const [restoring, setRestoring] = useState(false);
+    const [isWarningOpen, setIsWarningOpen] = useState(false);
 
     const {
         statusColor, statusText, statusDesc, isLangDoc, langDoc, pluginDir,
@@ -101,6 +109,14 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     };
 
     const handleReplace = async () => {
+        if (!data.isTranslated) {
+            setIsWarningOpen(true);
+            return;
+        }
+        await confirmReplace();
+    };
+
+    const confirmReplace = async () => {
         if (replacing) return;
         setReplacing(true);
         try {
@@ -109,14 +125,18 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 const files = Object.keys(translationJson.dict);
                 await i18n.backupManager.createBackup(plugin.id, pluginDir, files);
 
+                // 获取并复用翻译器 (外层获取一次)
+                const astTranslator = i18n.coreManager.getAstTranslator();
+                const regexTranslator = i18n.coreManager.getRegexTranslator();
+
                 for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
                     const targetFilePath = path.join(pluginDir, file);
-                    if (!fs.existsSync(targetFilePath)) continue;
+                    if (!await fs.pathExists(targetFilePath)) continue;
 
-                    let fileString = fs.readFileSync(targetFilePath).toString();
+                    const fileBuffer = await fs.readFile(targetFilePath);
+                    let fileString = fileBuffer.toString();
 
                     if (dict.ast && dict.ast.length > 0) {
-                        const astTranslator = new AstTranslator(i18n.settings);
                         const ast = astTranslator.loadCode(fileString);
                         if (ast) {
                             fileString = astTranslator.translate(ast, dict.ast);
@@ -124,18 +144,16 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                     }
 
                     if (dict.regex && dict.regex.length > 0) {
-                        const regexTranslator = new RegexTranslator(i18n.settings);
                         fileString = regexTranslator.translate(fileString, dict.regex);
                     }
 
                     if (targetFilePath.endsWith('.js')) {
-                        const checkTranslator = new AstTranslator(i18n.settings);
-                        if (!checkTranslator.loadCode(fileString)) {
+                        if (!astTranslator.loadCode(fileString)) {
                             throw new Error(t('Manager.Errors.SyntaxError', { file }));
                         }
                     }
 
-                    fs.writeFileSync(targetFilePath, fileString);
+                    await fs.writeFile(targetFilePath, fileString);
                 }
             }
             i18n.stateManager.setPluginState(plugin.id, {
@@ -149,7 +167,11 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 // @ts-ignore
                 if (reloadRes && !i18n.app.plugins.enabledPlugins.has(plugin.id)) {
                     i18n.notice.error(t('Manager.Errors.LoadFailedAfterApply'));
+                } else {
+                    i18n.notice.successPrefix(t('Manager.Actions.Apply'), t('Manager.Notices.ApplySuccess'));
                 }
+            } else {
+                i18n.notice.successPrefix(t('Manager.Actions.Apply'), t('Manager.Notices.ApplySuccess'));
             }
             refreshParent();
         } catch (error) {
@@ -181,7 +203,7 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
 
     if (viewMode === 'grid') {
         return (
-            <div className="flex flex-col h-[200px] border rounded-lg bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors p-3 relative group">
+            <div className="flex flex-col h-[200px] border rounded-lg bg-card text-card-foreground shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-3 relative group animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both">
                 <div className="flex justify-between items-start mb-1 gap-1">
                     <div className="flex flex-col overflow-hidden mr-1 min-w-0">
                         <span className="font-medium truncate text-sm" title={plugin.name}>{plugin.name}</span>
@@ -232,9 +254,13 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button variant="default" size="sm" className="h-8 px-3 gap-1" onClick={handleReplace} disabled={replacing}>
-                                                {replacing && <Loader2 className="w-3 h-3 animate-spin" />}
-                                                {t('Manager.Actions.Apply')}
+                                            <Button variant="default" size="sm" className={cn("h-8 px-3 gap-1 relative overflow-hidden group/btn", !data.isTranslated && "opacity-80")} onClick={handleReplace} disabled={replacing}>
+                                                {replacing ? <Loader2 className="w-3 h-3 animate-spin" /> : (
+                                                    <>
+                                                        {!data.isTranslated && <AlertTriangle className="w-3 h-3 text-yellow-500" />}
+                                                        <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Apply')}</div>
+                                                    </>
+                                                )}
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>{t('Manager.Actions.Apply')}</TooltipContent>
@@ -245,9 +271,8 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                                 <TooltipProvider>
                                     <Tooltip>
                                         <TooltipTrigger asChild>
-                                            <Button variant="secondary" size="sm" className="h-8 px-3 gap-1" onClick={handleRestore} disabled={restoring}>
-                                                {restoring && <Loader2 className="w-3 h-3 animate-spin" />}
-                                                {t('Manager.Actions.Restore')}
+                                            <Button variant="secondary" size="sm" className="h-8 px-3 gap-1 relative overflow-hidden group/btn" onClick={handleRestore} disabled={restoring}>
+                                                {restoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Restore')}</div>}
                                             </Button>
                                         </TooltipTrigger>
                                         <TooltipContent>{t('Manager.Actions.Restore')}</TooltipContent>
@@ -311,7 +336,7 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     }
 
     return (
-        <div className="border rounded-lg bg-card text-card-foreground shadow-sm hover:bg-muted/50 transition-colors px-4 py-2 w-full" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
+        <div className="border rounded-lg bg-card text-card-foreground shadow-sm hover:shadow-md transition-all duration-200 px-4 py-2 w-full animate-in fade-in slide-in-from-left-2 duration-500 fill-mode-both" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
             <div className="flex items-center gap-3 overflow-hidden min-w-0">
                 <TooltipProvider>
                     <Tooltip>
@@ -383,9 +408,13 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="default" size="sm" className="h-8 px-3 gap-1" onClick={handleReplace} disabled={replacing}>
-                                    {replacing && <Loader2 className="w-3 h-3 animate-spin" />}
-                                    {t('Manager.Actions.Apply')}
+                                <Button variant="default" size="sm" className={cn("h-8 px-3 gap-1 relative overflow-hidden group/btn", !data.isTranslated && "opacity-80")} onClick={handleReplace} disabled={replacing}>
+                                    {replacing ? <Loader2 className="w-3 h-3 animate-spin" /> : (
+                                        <>
+                                            {!data.isTranslated && <AlertTriangle className="w-3 h-3 text-yellow-500" />}
+                                            <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Apply')}</div>
+                                        </>
+                                    )}
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>{t('Manager.Actions.Apply')}</TooltipContent>
@@ -397,9 +426,8 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
-                                <Button variant="secondary" size="sm" className="h-8 px-3 gap-1" onClick={handleRestore} disabled={restoring}>
-                                    {restoring && <Loader2 className="w-3 h-3 animate-spin" />}
-                                    {t('Manager.Actions.Restore')}
+                                <Button variant="secondary" size="sm" className="h-8 px-3 gap-1 relative overflow-hidden group/btn" onClick={handleRestore} disabled={restoring}>
+                                    {restoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Restore')}</div>}
                                 </Button>
                             </TooltipTrigger>
                             <TooltipContent>{t('Manager.Actions.Restore')}</TooltipContent>
@@ -446,6 +474,30 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
+            <Dialog open={isWarningOpen} onOpenChange={setIsWarningOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{t('Manager.Dialogs.EmptyTranslationTitle') || '未检测到翻译内容'}</DialogTitle>
+                        <DialogDescription>
+                            {t('Manager.Dialogs.EmptyTranslationDesc') || '当前选择的翻译源尚未进行任何实质性翻译（译文与原文完全一致）。应用此文件后，插件界面语言将不会发生任何变化。建议您先在编辑器中完成翻译后再应用。'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="flex gap-2">
+                        <Button variant="outline" onClick={() => {
+                            setIsWarningOpen(false);
+                            const pluginTranslationV1 = loadTranslationFile(langDoc);
+                            useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
+                            useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
+                            i18n.view.activateView(EDITOR_VIEW_TYPE);
+                        }}>
+                            {t('Manager.Actions.GoToEditor') || '前往编辑器'}
+                        </Button>
+                        <Button variant="default" onClick={() => confirmReplace()}>
+                            {t('Manager.Actions.ContinueApply') || '坚持应用'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 });

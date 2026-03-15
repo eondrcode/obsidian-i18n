@@ -282,7 +282,7 @@ export const ThemeItem: React.FC<ThemeItemProps> = React.memo(({ theme, i18n, da
                                     </DropdownMenuItem>
                                     {activeSourceId && (
                                         <DropdownMenuItem onClick={() => {
-                                            sourceManager?.removeSource(theme.name);
+                                            sourceManager?.removeSource(activeSourceId);
                                             refreshParent();
                                         }} className="text-destructive focus:text-destructive">
                                             <XCircle className="w-4 h-4 mr-2" />

@@ -348,6 +348,32 @@ export class AstTranslator {
         return null;
     }
 
+    /**
+     * 在 AST 中查找目标文本的位置
+     * @param targetText 目标文本
+     * @param ast AST 节点
+     * @returns 匹配项列表
+     */
+    public findString(targetText: string, ast: t.Node): { line: number, column: number, type: string, name: string, source: string }[] {
+        const matches: { line: number, column: number, type: string, name: string, source: string }[] = [];
+        
+        this.traverseAllStrings(ast, (type, name, valueNode) => {
+            const source = this.extractSource(valueNode);
+            if (source && source.includes(targetText)) {
+                const loc = valueNode.loc?.start;
+                matches.push({
+                    line: loc?.line || 0,
+                    column: loc?.column || 0,
+                    type,
+                    name,
+                    source
+                });
+            }
+        });
+        
+        return matches;
+    }
+
     private getFingerprint(item: { type: string, name: string, source: string }) {
         return `${item.type}:${item.name}:${item.source}`;
     }

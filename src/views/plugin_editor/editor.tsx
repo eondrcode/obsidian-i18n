@@ -15,7 +15,7 @@ import { EditorProps, DiagnoseError } from './types';
 import { RegexEditor, AstEditor } from '.';
 
 import { useGlobalStoreInstance } from '~/utils';
-import { AstTranslator, RegexTranslator, mergeAstItems, mergeRegexItems, mountReactView } from '~/utils';
+import { AstTranslator, RegexTranslator, mergeAstItems, mergeRegexItems, mountReactView, StringPicker } from '~/utils';
 import { calculateChecksum } from '@/src/utils/translator/translation';
 import { saveTranslationFile } from '@/src/manager/io-manager';
 
@@ -53,6 +53,7 @@ const SaveButton: React.FC<{ onSave: () => void; isSaving: boolean }> = React.me
         </Button>
     );
 });
+
 
 /**
  * 自动保存管理器
@@ -126,6 +127,7 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
     const [activeTab, setActiveTab] = useState('ast');
     const [isAddPathDialogOpen, setIsAddPathDialogOpen] = useState(false);
     const [newPathInput, setNewPathInput] = useState('');
+
 
     useEffect(() => {
         // 如果已经初始化过，不再用原始数据覆盖 store
@@ -319,6 +321,7 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
             notice.error(t('Editor.Actions.OpenFile') + ' ' + t('Common.Status.Failure') + ': ' + e);
         }
     }, [i18n, notice, t]);
+
 
     // ================================================== Diagnose ==================================================
     const handleDiagnose = React.useCallback(async () => {

@@ -48,7 +48,8 @@ export default {
         FontSize: "字体大小",
         ParenthesesCheck: "括号匹配",
         VariableCheck: "变量校验",
-        PunctuationCheck: "标点检查"
+        PunctuationCheck: "标点检查",
+        ExpectedConsumption: "预期消耗"
     },
     Actions: {
         BatchTranslate: "开始批量翻译 ({{count}})",

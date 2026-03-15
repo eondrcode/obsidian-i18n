@@ -222,9 +222,9 @@ export class NoticeManager {
     resultPrefix(prefix: string, isSuccess: boolean, text: unknown = "", duration = 4000) {
         let content: string;
         if (isSuccess) {
-            content = text ? `[${prefix}] ${t('common.success')}\n${text}` : `[${prefix}] ${t('common.success')}`;
+            content = text ? `[${prefix}] ${t('Common.Notices.Success')}\n${text}` : `[${prefix}] ${t('Common.Notices.Success')}`;
         } else {
-            content = `[${prefix}] ${t('common.failure')}\n${text}`;
+            content = `[${prefix}] ${t('Common.Notices.Failure')}\n${text}`;
         }
         const notice = this.createNotice(
             content,
@@ -243,9 +243,9 @@ export class NoticeManager {
     result(isSuccess: boolean, text: unknown = "", duration = 4000) {
         let content: string;
         if (isSuccess) {
-            content = text ? `${t('common.success')}\n${text}` : t('common.success');
+            content = text ? `${t('Common.Notices.Success')}\n${text}` : t('Common.Notices.Success');
         } else {
-            content = `${t('common.failure')}\n${text}`;
+            content = `${t('Common.Notices.Failure')}\n${text}`;
         }
         const notice = this.createNotice(
             content,

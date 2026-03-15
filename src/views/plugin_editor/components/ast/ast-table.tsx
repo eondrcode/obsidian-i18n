@@ -122,13 +122,14 @@ const MemoizedAstRowInner = React.forwardRef<HTMLTableRowElement, MemoizedAstRow
         );
     }
 );
+MemoizedAstRowInner.displayName = 'MemoizedAstRow';
 
 const MemoizedAstRow = React.memo(MemoizedAstRowInner, (prev, next) => {
     return prev.isSelected === next.isSelected
         && prev.row.original === next.row.original;
 });
 
-export const ASTTable: React.FC<Props> = React.memo(({ data, editingId, onRowClick, onDelete, onReset }) => {
+export const ASTTable = React.forwardRef<HTMLDivElement, Props>(({ data, editingId, onRowClick, onDelete, onReset }, ref) => {
     const { t } = useTranslation();
     const updateAstItem = useRegexStore.use.updateAstItem();
     const parentRef = useRef<HTMLDivElement>(null);
@@ -263,7 +264,7 @@ export const ASTTable: React.FC<Props> = React.memo(({ data, editingId, onRowCli
     // Check for empty data
     if (!data || data.length === 0) {
         return (
-            <div className="rounded-md border h-full overflow-hidden flex flex-col">
+            <div ref={ref} className="rounded-md border h-full overflow-hidden flex flex-col">
                 <ASTTableEmptyState />
             </div>
         );
@@ -275,7 +276,7 @@ export const ASTTable: React.FC<Props> = React.memo(({ data, editingId, onRowCli
     const paddingBottom = virtualRows.length > 0 ? totalSize - virtualRows[virtualRows.length - 1].end : 0;
 
     return (
-        <div className="rounded-md border h-full overflow-hidden flex flex-col">
+        <div ref={ref} className="rounded-md border h-full overflow-hidden flex flex-col">
             <div ref={parentRef} className="flex-1 h-full overflow-auto" style={{ willChange: 'transform' }}>
                 <table className="w-full caption-bottom text-sm">
                     <TableHeader>
@@ -326,3 +327,5 @@ export const ASTTable: React.FC<Props> = React.memo(({ data, editingId, onRowCli
         </div>
     );
 });
+
+ASTTable.displayName = 'ASTTable';

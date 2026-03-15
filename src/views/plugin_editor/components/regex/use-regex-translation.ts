@@ -222,7 +222,11 @@ export const useRegexTranslation = () => {
             totalBatches,
             targetItems,
             timeout,
-            timeoutError
+            timeoutError,
+            get estimation() {
+                const op = new OpenAITranslationService();
+                return op.estimateTokens(targetItems, 'regex');
+            }
         },
         actions: {
             setLanguage: handleLanguageChange,

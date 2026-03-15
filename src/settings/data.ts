@@ -1,6 +1,17 @@
 import { pageRule } from '../utils';
 import { DEFAULT_AST_PROMPT_TEMPLATE, DEFAULT_REGEX_PROMPT_TEMPLATE, DEFAULT_THEME_PROMPT_TEMPLATE } from '../ai/openai-translation-service';
 
+export interface OpenAIProfile {
+    id: string;
+    name: string;
+    url: string;
+    key: string;
+    model: string;
+    useCustomPrice: boolean;
+    priceInput: number;
+    priceOutput: number;
+}
+
 export interface I18nSettings {
     // ==============================
     // 基础设置
@@ -35,9 +46,14 @@ export interface I18nSettings {
     llmThemePrompt?: string;        // LLM Theme 自定义提示词模板
 
     // OpenAI 专属配置
-    llmOpenaiUrl: string;           // OpenAI API 代理/基础接口地址
-    llmOpenaiKey: string;           // OpenAI API 密钥
-    llmOpenaiModel: string;         // 选用的 OpenAI 模型名
+    llmOpenaiUrl: string;           // OpenAI API 代理/基础接口地址 (当前激活)
+    llmOpenaiKey: string;           // OpenAI API 密钥 (当前激活)
+    llmOpenaiModel: string;         // 选用的 OpenAI 模型名 (当前激活)
+    llmOpenaiProfiles: OpenAIProfile[]; // 所有 OpenAI 配置方案
+    llmOpenaiActiveProfileId: string;    // 当前激活的 Profile ID
+    llmUseCustomPrice: boolean;     // 是否使用自定义价格估算
+    llmPriceInputCustom: number;    // 自定义输入价格 ($/1M tokens)
+    llmPriceOutputCustom: number;   // 自定义输出价格 ($/1M tokens)
 
     // ==============================
     // 沉浸式翻译配置 (IMT)
@@ -122,6 +138,11 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     llmOpenaiUrl: '',
     llmOpenaiKey: '',
     llmOpenaiModel: '',
+    llmOpenaiProfiles: [],
+    llmOpenaiActiveProfileId: '',
+    llmUseCustomPrice: true,
+    llmPriceInputCustom: 1.1,
+    llmPriceOutputCustom: 4.4,
 
     // ==============================
     // 沉浸式翻译配置 (IMT)

@@ -99,6 +99,7 @@ const MemoizedRegexRowInner = React.forwardRef<HTMLTableRowElement, MemoizedRege
         );
     }
 );
+MemoizedRegexRowInner.displayName = 'MemoizedRegexRow';
 
 const MemoizedRegexRow = React.memo(MemoizedRegexRowInner, (prev, next) => {
     return prev.isSelected === next.isSelected

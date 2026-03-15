@@ -1,8 +1,8 @@
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Progress, Checkbox } from '@/src/shadcn';
+import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Progress, Checkbox, Badge } from '@/src/shadcn';
 import { STYLES } from '@/src/constants/llm-options';
 import { SUPPORTED_LANGUAGES } from '@/src/constants/languages';
 import { TemplateCard } from '../../plugin_editor/components/common/template-card';
-import { Square, Clock, Languages, Sparkles, Layers, Palette } from 'lucide-react';
+import { Square, Clock, Languages, Sparkles, Layers, Palette, Coins } from 'lucide-react';
 import { useThemeTranslation } from './use-theme-translation';
 import { useTranslation } from 'react-i18next';
 
@@ -172,6 +172,24 @@ const ThemeLLMCard: React.FC<Props> = ({ controller }) => {
                         </label>
                     </div>
                 </div>
+
+                {/* Token Estimation */}
+                {!isTranslating && targetItems.length > 0 && (
+                    <div className="flex items-center justify-between p-2 rounded-md bg-muted/30 border border-border/50 animate-in fade-in slide-in-from-top-1 duration-300">
+                        <div className="flex items-center gap-2">
+                            <Coins className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{t('Editor.Labels.ExpectedConsumption')}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 font-mono">
+                                {state.estimation.tokens} Tokens
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground/80">
+                                ≈ ¥{state.estimation.cost.toFixed(4)}
+                            </span>
+                        </div>
+                    </div>
+                )}
 
                 {/* Progress Bar (Visible when translating) */}
                 {isTranslating && (

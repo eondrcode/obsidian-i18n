@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { t } from '../locales';
 import I18N from '../main';
-import { activateIMT, deactivateIMT } from '../utils';
+import { activateIMT, deactivateIMT, AstTranslator, RegexTranslator } from '../utils';
 import { MANAGER_VIEW_TYPE } from '../views/manager/manager-view';
 
 export class CoreManager {
@@ -19,6 +19,10 @@ export class CoreManager {
     css: string;
 
     i18nReviewEl: HTMLElement;
+
+    // [管理相关] - 翻译器实例复用
+    private _astTranslator: AstTranslator | null = null;
+    private _regexTranslator: RegexTranslator | null = null;
 
     constructor(i18n: I18N) {
         this.i18n = i18n;
@@ -128,6 +132,34 @@ export class CoreManager {
         } catch (e) {
             this.i18n.logger.error('Failed to precompile CSSStyleSheet:', e);
         }
+    }
+
+    /**
+     * 获取 AST 翻译器实例 (懒加载/复用)
+     */
+    public getAstTranslator(): AstTranslator {
+        if (!this._astTranslator) {
+            this._astTranslator = new AstTranslator(this.i18n.settings);
+        }
+        return this._astTranslator;
+    }
+
+    /**
+     * 获取 Regex 翻译器实例 (懒加载/复用)
+     */
+    public getRegexTranslator(): RegexTranslator {
+        if (!this._regexTranslator) {
+            this._regexTranslator = new RegexTranslator(this.i18n.settings);
+        }
+        return this._regexTranslator;
+    }
+
+    /**
+     * 重置翻译器实例 (当设置变更等情况下调用)
+     */
+    public resetTranslators() {
+        this._astTranslator = null;
+        this._regexTranslator = null;
     }
 
 }

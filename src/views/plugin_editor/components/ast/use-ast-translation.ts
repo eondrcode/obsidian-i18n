@@ -222,7 +222,11 @@ export const useAstTranslation = () => {
             totalBatches,
             targetItems,
             timeout,
-            timeoutError
+            timeoutError,
+            get estimation() {
+                const op = new OpenAITranslationService();
+                return op.estimateTokens(targetItems, 'ast');
+            }
         },
         actions: {
             setLanguage: handleLanguageChange,

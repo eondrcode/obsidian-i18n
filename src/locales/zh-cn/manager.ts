@@ -21,7 +21,9 @@ export default {
         OpenFolder: "浏览目录",
         OpenSettings: "插件设置",
         SelectSource: "选择数据源",
-        Reload: "重载插件"
+        Reload: "重载插件",
+        GoToEditor: "前往编辑器",
+        ContinueApply: "坚持应用"
     },
     Placeholders: {
         SearchPlugins: "搜索插件...",
@@ -57,6 +59,10 @@ export default {
         NoPlugins: "未发现插件",
         NoThemes: "未发现主题"
     },
+    Dialogs: {
+        EmptyTranslationTitle: "未检测到翻译内容",
+        EmptyTranslationDesc: "当前选择的翻译源尚未进行任何实质性翻译（译文与原文完全一致）。应用此文件后，插件界面语言将不会发生任何变化。建议您先在编辑器中完成翻译后再应用。"
+    },
     Hints: {
         NoTransDesc: "暂无本地语言数据",
         ExtractSuccessDesc: "已生成当前版本的翻译模板"
@@ -67,7 +73,8 @@ export default {
         ExtractSuccess: "提取成功",
         ThemeExtractPrefix: "提取译文",
         ThemeApplyPrefix: "主题应用",
-        ThemeRestorePrefix: "主题还原"
+        ThemeRestorePrefix: "主题还原",
+        ApplySuccess: "翻译应用成功"
     },
     Errors: {
         Error: "错误",

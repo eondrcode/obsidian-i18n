@@ -150,6 +150,28 @@ export class RegexTranslator {
         return translatedCode;
     }
 
+    /**
+     * 在源码中通过正则查找目标文本的位置
+     * @param targetText 目标文本
+     * @param code 源代码
+     * @returns 匹配项列表
+     */
+    public findString(targetText: string, code: string): { line: number, source: string }[] {
+        const matches: { line: number, source: string }[] = [];
+        const lines = code.split('\n');
+        
+        lines.forEach((line, index) => {
+            if (line.includes(targetText)) {
+                matches.push({
+                    line: index + 1,
+                    source: line.trim()
+                });
+            }
+        });
+        
+        return matches;
+    }
+
 };
 
 // ------------------------------

@@ -2,7 +2,6 @@ import { App, PluginManifest } from 'obsidian';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import I18N from '../main';
-import { AstTranslator, RegexTranslator } from '../utils';
 import { loadTranslationFile } from '../manager/io-manager';
 import { t } from '../locales';
 
@@ -26,6 +25,10 @@ export class InjectorManager {
             // @ts-ignore
             plugins = Object.values(app.plugins.manifests).filter(item => item.id !== 'i18n');
             let updateitem = 0;
+
+            // 获取翻译器实例 (外层复用)
+            const astTranslator = this.i18n.coreManager.getAstTranslator();
+            const regexTranslator = this.i18n.coreManager.getRegexTranslator();
 
             for (const plugin of plugins) {
                 // @ts-ignore
@@ -59,7 +62,6 @@ export class InjectorManager {
 
                                 // 应用 AST
                                 if (dict.ast && dict.ast.length > 0) {
-                                    const astTranslator = new AstTranslator(this.i18n.settings);
                                     const ast = astTranslator.loadCode(fileString);
                                     if (ast) {
                                         fileString = astTranslator.translate(ast, dict.ast);
@@ -68,7 +70,6 @@ export class InjectorManager {
 
                                 // 应用 Regex
                                 if (dict.regex && dict.regex.length > 0) {
-                                    const regexTranslator = new RegexTranslator(this.i18n.settings);
                                     fileString = regexTranslator.translate(fileString, dict.regex);
                                 }
 

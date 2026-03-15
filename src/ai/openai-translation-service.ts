@@ -1,10 +1,12 @@
 
 import { requestUrl } from "obsidian";
 import OpenAI from "openai";
+import { normalizeOpenAIUrl } from "../utils/ai/url-helper";
 import { RegexItem, AstItem } from "../views/plugin_editor/types";
 import { ThemeTranslationItem } from "../views/theme_editor/types";
 import z from "zod";
 import { useGlobalStoreInstance } from "~/utils";
+import { estimateBatchTokens, estimateCost } from "../utils/ai/token-estimator";
 
 // 自定义消息类型
 interface ChatMessage {
@@ -70,7 +72,8 @@ export class OpenAITranslationService {
      */
     private getOpenAIClient(): OpenAI {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
-        const baseURL = settings.llmOpenaiUrl?.trim() || undefined;
+        const rawBaseURL = normalizeOpenAIUrl(settings.llmOpenaiUrl);
+        const baseURL = rawBaseURL ? `${rawBaseURL}/v1` : undefined;
 
         return new OpenAI({
             baseURL: baseURL,
@@ -313,6 +316,38 @@ export class OpenAITranslationService {
             const target = result ? result.t : (item.target || item.source);
             return { ...item, target };
         });
+    }
+
+
+    /**
+     * 根据当前选中的模型估算 Token 数和成本
+     */
+    public estimateTokens(items: any[], type: 'regex' | 'ast' | 'theme'): { tokens: number, cost: number } {
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        let systemPrompt = "";
+
+        const language = settings.llmLanguage;
+        const style = settings.llmStyle;
+
+        if (type === 'regex') {
+            const template = settings.llmRegexPrompt || DEFAULT_REGEX_PROMPT_TEMPLATE;
+            systemPrompt = generateRegexSystemPrompt(template, language, style);
+        } else if (type === 'ast') {
+            const template = settings.llmAstPrompt || DEFAULT_AST_PROMPT_TEMPLATE;
+            systemPrompt = generateAstSystemPrompt(template, language, style);
+        } else if (type === 'theme') {
+            const template = settings.llmThemePrompt || DEFAULT_THEME_PROMPT_TEMPLATE;
+            systemPrompt = generateThemeSystemPrompt(template, language, style);
+        }
+
+        const tokens = estimateBatchTokens(items, systemPrompt);
+        const cost = estimateCost(
+            tokens,
+            settings.llmOpenaiModel || 'gpt-4o-mini',
+            settings.llmUseCustomPrice ? settings.llmPriceInputCustom : undefined
+        );
+
+        return { tokens, cost };
     }
 
 
