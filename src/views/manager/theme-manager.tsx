@@ -156,10 +156,17 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
             const state = i18n.stateManager.getThemeState(theme.name);
 
             let isTranslated = false;
+            let translationVersion = '';
+            let supportedVersion = '';
+            let description = '';
+
             if (hasTranslation && translationPath) {
                 try {
                     const localJson = loadTranslationFile(translationPath);
                     isTranslated = checkIsTranslated(localJson);
+                    translationVersion = localJson.metadata.version;
+                    supportedVersion = localJson.metadata.supportedVersions;
+                    description = localJson.metadata.description;
                 } catch (e) {
                     // skip error
                 }
@@ -192,7 +199,10 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                 themeDir, themeCssPath,
                 sources, activeSourceId,
                 isApplied,
-                isTranslated
+                isTranslated,
+                translationVersion,
+                description,
+                supportedVersion
             };
         }
         return stats;
@@ -250,7 +260,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
 
     const columns = useMemo(() => {
         if (viewMode === 'list') return 1;
-        const count = Math.floor((containerWidth + 8) / (250 + 8));
+        const count = Math.floor((containerWidth + 16) / (320 + 16));
         return Math.max(1, count);
     }, [viewMode, containerWidth]);
 
@@ -259,7 +269,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
     const rowVirtualizer = useVirtualizer({
         count: rowCount,
         getScrollElement: () => parentRef.current,
-        estimateSize: useCallback(() => viewMode === 'list' ? 50 + 8 : 158 + 8, [viewMode]), // 列表项约50px+8px间距，网格项约150px+16px间距总和
+        estimateSize: useCallback(() => viewMode === 'list' ? 44 + 6 : 200 + 12, [viewMode]), // 列表项约44px+6px间距，网格项约200px+12px间距总和
         overscan: 5,
     });
 
@@ -276,15 +286,15 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                             placeholder={t('Manager.Placeholders.SearchThemes')}
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-8 h-8"
+                            className="pl-8 h-9 rounded-none"
                         />
                     </div>
 
-                    <div className="flex items-center gap-1 border rounded-md p-0.5">
+                    <div className="flex items-center gap-1 border rounded-none p-0.5 h-9 bg-muted/20">
                         <Button
                             variant={viewMode === 'list' ? 'secondary' : 'ghost'}
                             size="icon"
-                            className="h-7 w-7"
+                            className="h-8 w-8 rounded-none transition-all"
                             onClick={() => setViewMode('list')}
                         >
                             <List className="h-4 w-4" />
@@ -292,7 +302,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                         <Button
                             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                             size="icon"
-                            className="h-7 w-7"
+                            className="h-8 w-8 rounded-none transition-all"
                             onClick={() => setViewMode('grid')}
                         >
                             <LayoutGrid className="h-4 w-4" />
@@ -300,7 +310,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                     </div>
 
                     <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
-                        <SelectTrigger className="w-[120px]" size="sm">
+                        <SelectTrigger className="w-[120px] h-9 rounded-none" size="default">
                             <SelectValue placeholder={t('Manager.Filters.All')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -311,7 +321,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                     </Select>
 
                     <Select value={sortType} onValueChange={setSortType}>
-                        <SelectTrigger className="w-[120px]" size="sm">
+                        <SelectTrigger className="w-[130px] h-9 rounded-none" size="default">
                             <SelectValue placeholder={t('Common.Data.SortAsc')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -324,11 +334,11 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
             </div>
 
             <ScrollArea className="flex-1 min-h-0" viewportRef={parentRef}>
-                <div className="p-4">
+                <div className="py-2 px-4">
                     <div
                         className={cn(
                             "gap-2 w-full overflow-hidden relative",
-                            viewMode === 'grid' ? "grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))]" : "flex flex-col"
+                            viewMode === 'grid' ? "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))]" : "flex flex-col"
                         )}
                         style={{
                             height: `${rowVirtualizer.getTotalSize()}px`,
@@ -350,8 +360,8 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                                         transform: `translateY(${virtualRow.start}px)`,
                                         display: 'grid',
                                         gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                                        gap: '8px',
-                                        paddingBottom: '8px',
+                                        gap: viewMode === 'list' ? '0px' : '12px',
+                                        paddingBottom: viewMode === 'list' ? '6px' : '12px',
                                     }}
                                 >
                                     {itemsInRow.map((theme) => (

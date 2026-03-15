@@ -18,8 +18,7 @@ import { TranslationSource } from '~/types';
 import { Badge } from '~/shadcn/ui/badge';
 import { cn } from '~/shadcn/lib/utils';
 import { calculateChecksum } from '~/utils';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MarkdownViewer } from './markdown-viewer';
 
 type UpdateStatus = 'not_downloaded' | 'up_to_date' | 'update_available' | 'fork_available';
 
@@ -372,13 +371,53 @@ export const ExploreTab: React.FC = () => {
         new Notice(t_i18n('Cloud.Notices.RepoUnsubscribed'));
     }, [removeSavedRepo, savedRepos, persistRepos, t_i18n]);
 
-    // 过滤 manifest 条目
-    const filteredEntries = targetManifest.filter((entry) => {
-        if (filterLanguage && filterLanguage !== 'all' && entry.language !== filterLanguage) return false;
-        if (filterQuery && !entry.plugin.toLowerCase().includes(filterQuery.toLowerCase()) &&
-            !entry.title.toLowerCase().includes(filterQuery.toLowerCase())) return false;
-        return true;
-    });
+    // 过滤与排序 manifest 条目
+    const filteredEntries = useMemo(() => {
+        // 版本号比较助手 (处理非标准格式)
+        const robustCompareVersions = (v1: string = '0', v2: string = '0') => {
+            const parts1 = String(v1).split(/[.-]/).map(p => isNaN(parseInt(p)) ? p : parseInt(p));
+            const parts2 = String(v2).split(/[.-]/).map(p => isNaN(parseInt(p)) ? p : parseInt(p));
+            const maxLen = Math.max(parts1.length, parts2.length);
+            for (let i = 0; i < maxLen; i++) {
+                const p1 = parts1[i] ?? 0;
+                const p2 = parts2[i] ?? 0;
+                if (typeof p1 === 'number' && typeof p2 === 'number') {
+                    if (p1 > p2) return 1;
+                    if (p1 < p2) return -1;
+                } else {
+                    const s1 = String(p1);
+                    const s2 = String(p2);
+                    if (s1 > s2) return 1;
+                    if (s1 < s2) return -1;
+                }
+            }
+            return 0;
+        };
+
+        return targetManifest
+            .filter((entry) => {
+                if (filterLanguage && filterLanguage !== 'all' && entry.language !== filterLanguage) return false;
+                if (filterQuery && !entry.plugin.toLowerCase().includes(filterQuery.toLowerCase()) &&
+                    !entry.title.toLowerCase().includes(filterQuery.toLowerCase())) return false;
+                return true;
+            })
+            .sort((a, b) => {
+                // 1. 按插件 ID 升序排列 (分组)
+                if (a.plugin !== b.plugin) {
+                    return a.plugin.localeCompare(b.plugin);
+                }
+
+                // 2. 组内按插件版本 (supported_versions) 倒序排列
+                const pluginVerComp = robustCompareVersions(a.supported_versions, b.supported_versions);
+                if (pluginVerComp !== 0) return -pluginVerComp; // 倒序
+
+                // 3. 同插件版本下，按译文版本 (version) 倒序排列
+                const transVerComp = robustCompareVersions(a.version, b.version);
+                if (transVerComp !== 0) return -transVerComp;
+
+                return 0;
+            });
+    }, [targetManifest, filterLanguage, filterQuery]);
 
 
     // 下载翻译（支持更新已存在的翻译源）
@@ -690,18 +729,20 @@ export const ExploreTab: React.FC = () => {
                                         className="pl-8 h-8 text-xs bg-background border-border/60 focus:border-primary/50 transition-all rounded-md"
                                     />
                                 </div>
-                                <Select onValueChange={(val) => {
+                                <Select value={filterQuery || 'all'} onValueChange={(val) => {
                                     if (val === 'all') setFilterQuery('');
                                     else if (val) setFilterQuery(val);
                                 }} disabled={targetManifest.length === 0}>
                                     <SelectTrigger size="sm" className="w-40 text-xs bg-background border-border/60 rounded-md shadow-sm h-8">
-                                        <SelectValue placeholder={t('Common.Filters.All')} />
+                                        <SelectValue>
+                                            {filterQuery ? (installedItems.find(i => i.id === filterQuery)?.name || filterQuery) : "全部"}
+                                        </SelectValue>
                                     </SelectTrigger>
                                     <SelectContent>
                                         <ScrollArea className="h-72">
-                                            <SelectItem value="all" className="text-[11px]">{t('Common.Filters.All')}</SelectItem>
+                                            <SelectItem value="all" className="text-[11px]">全部</SelectItem>
                                             {installedItems.map((item) => (
-                                                <SelectItem key={item.id} value={item.name} className="text-[11px]">
+                                                <SelectItem key={item.id} value={item.id} className="text-[11px]">
                                                     <div className="flex items-center gap-2">
                                                         {item.type === 'plugin' ? <Layers className="w-3 h-3" /> : <Palette className="w-3 h-3" />}
                                                         <span>{item.name}</span>
@@ -756,7 +797,11 @@ export const ExploreTab: React.FC = () => {
                                         <p className="text-sm">{t_i18n('Cloud.Labels.PleaseWait')}</p>
                                     </div>
                                 ) : targetRepoReadme ? (
-                                    <MarkdownViewer content={targetRepoReadme} />
+                                    <MarkdownViewer
+                                        content={targetRepoReadme}
+                                        owner={targetRepoAddress.split('/')[0]}
+                                        repo={targetRepoAddress.split('/')[1]}
+                                    />
                                 ) : (
                                     <div className="flex flex-col items-center justify-center py-32 text-muted-foreground border-2 border-dashed border-border/40 rounded-xl bg-muted/10 mx-auto max-w-md">
                                         <FileText className="w-12 h-12 mb-4 opacity-20" />
@@ -881,16 +926,6 @@ export const ExploreTab: React.FC = () => {
     );
 };
 
-// ========== Markdown 渲染组件 ==========
-const MarkdownViewer = ({ content }: { content: string }) => {
-    return (
-        <div className="markdown-container">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
-            </ReactMarkdown>
-        </div>
-    );
-};
 
 // ========== 翻译条目卡片 ==========
 interface ManifestEntryCardProps {

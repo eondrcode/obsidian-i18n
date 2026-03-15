@@ -6,8 +6,7 @@ import React, { useCallback, useState, useRef, useEffect, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Textarea } from '@/src/shadcn';
 import { Trash2, FolderOpen, AlertCircle, Loader2, Edit3, Layers, Clock, Tag, RefreshCw, Search, Globe, Download, Star, Github, FileText, Save, Users, History, Cloud, HardDrive, Upload, Palette, Plus, CheckCircle2, Cpu, Zap, CircleCheckBig, MessageSquareWarning } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MarkdownViewer } from './markdown-viewer';
 import { useCloudStore } from '../cloud-store';
 import { useGlobalStoreInstance } from '~/utils';
 import { t } from '@/src/locales/index';
@@ -953,7 +952,11 @@ export const ManageTab: React.FC = () => {
                             ) : (
                                 <div className="p-6">
                                     {myRepoReadme ? (
-                                        <MarkdownViewer content={myRepoReadme} />
+                                        <MarkdownViewer
+                                            content={myRepoReadme}
+                                            owner={githubUser?.login}
+                                            repo={userRepo}
+                                        />
                                     ) : (
                                         <div className="flex flex-col items-center justify-center py-32 text-muted-foreground border-2 border-dashed border-border/40 rounded-xl bg-muted/10 mx-auto max-w-md">
                                             <FileText className="w-12 h-12 mb-4 opacity-20" />
@@ -1120,16 +1123,6 @@ const MyTranslationCard: React.FC<MyTranslationCardProps> = ({ entry, onEdit, on
     );
 };
 
-// ========== Markdown 渲染组件 ==========
-const MarkdownViewer = ({ content }: { content: string }) => {
-    return (
-        <div className="markdown-container">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {content}
-            </ReactMarkdown>
-        </div>
-    );
-};
 // ========== 个人翻译列表组件 (独立封装以确保状态重置) ==========
 interface MyTranslationsListProps {
     filteredEntries: ManifestEntry[];

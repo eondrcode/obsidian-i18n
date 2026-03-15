@@ -43,30 +43,23 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
 
     return (
         <div className="flex flex-col h-full bg-background overflow-hidden">
-            <Tabs
-                defaultValue={i18n.settings.managerTab || 'plugins'}
-                onValueChange={(val) => {
-                    i18n.settings.managerTab = val;
-                    i18n.saveSettings();
-                }}
-                className="flex flex-col h-full"
-            >
+            <Tabs defaultValue={i18n.settings.managerTab || 'plugins'} onValueChange={(val) => { i18n.settings.managerTab = val; i18n.saveSettings(); }} className="flex flex-col h-full gap-0"   >
                 {/* 顶部工具栏：左侧 Tab 切换 + 右侧功能按钮 */}
                 <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
                     {/* 左侧：Tab 切换器 */}
-                    <TabsList className="h-9 p-1 bg-muted/50 border shadow-inner">
-                        <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3" value="plugins">
+                    <TabsList className="h-9 p-1 bg-muted/50 border rounded-none shadow-inner">
+                        <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3 rounded-none" value="plugins">
                             <LayoutGrid className="w-3.5 h-3.5" />
                             {t('Manager.Labels.Plugins')}
                         </TabsTrigger>
-                        <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3" value="themes">
+                        <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3 rounded-none" value="themes">
                             <Palette className="w-3.5 h-3.5" />
                             {t('Manager.Labels.Themes')}
                         </TabsTrigger>
                     </TabsList>
 
                     {/* 右侧：功能按钮组 */}
-                    <div className="flex items-center border rounded-md divide-x bg-background shadow-sm overflow-hidden">
+                    <div className="flex items-center border rounded-none divide-x bg-background shadow-sm overflow-hidden">
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>

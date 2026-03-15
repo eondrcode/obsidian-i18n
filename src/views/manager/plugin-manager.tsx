@@ -4,15 +4,13 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { useTranslation } from 'react-i18next';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Settings, FolderOpen, Pen, FileOutput, RefreshCw, User, Cloud, CircleHelp, Info, XCircle, Search, Filter, LayoutGrid, List, Loader2, Github, Paperclip, FileText, Trash2, Coffee, MoreHorizontal, Activity } from 'lucide-react';
+import { Search, LayoutGrid, List } from 'lucide-react';
 
 import I18N from 'src/main';
 import { PluginTranslationV1 } from 'src/types';
-import Url from 'src/constants/url';
 import { formatTimestamp, isValidPluginTranslationV1Format, i18nOpen } from '../../utils';
 import { loadTranslationFile } from '../../manager/io-manager';
 import { useGlobalStoreInstance } from '~/utils';
-import { EDITOR_VIEW_TYPE } from '../../views';
 
 import {
     Button,
@@ -22,19 +20,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-    Badge,
     ScrollArea,
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-    Card,
-    Separator,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-    DropdownMenuSeparator,
 } from '~/shadcn';
 import { cn } from '~/shadcn/lib/utils';
 
@@ -136,9 +122,11 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
             let statusText: string = t('Manager.Status.ToExtract');
             let statusDesc: string = t('Manager.Hints.NoTransDesc');
             let mtime: number = 0;
-            let supportedVersion: string = '';
+            let translationVersion = '';
+            let supportedVersion = '';
 
             if (localJson && translationFormatMark) {
+                translationVersion = localJson.metadata.version;
                 supportedVersion = localJson.metadata.supportedVersions;
                 mtime = isLangDoc ? fs.statSync(langDoc).mtimeMs : Date.now();
 
@@ -154,7 +142,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                     statusColor = "bg-amber-500 dark:bg-amber-600";
                     statusText = t('Manager.Status.Untranslated');
                 }
-                statusDesc = `${t('Manager.Labels.Mtime')}: ${formatTimestamp(mtime)} | ${t('Manager.Labels.SupportVer')}: ${supportedVersion}`;
+                statusDesc = `${t('Manager.Labels.Mtime')}: ${formatTimestamp(mtime)}`;
             } else if (localJson && !translationFormatMark) {
                 statusColor = "bg-destructive";
                 statusText = t('Manager.Errors.Error');
@@ -168,7 +156,9 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                 statusColor, statusText, statusDesc, isLangDoc, langDoc, pluginDir,
                 sources, activeSourceId, translationFormatMark, mainDoc, manifestDoc,
                 isApplied: !!(state && state.isApplied),
-                isTranslated
+                isTranslated,
+                translationVersion,
+                supportedVersion
             };
         }
         return stats;
@@ -241,8 +231,8 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
 
     const columns = useMemo(() => {
         if (viewMode === 'list') return 1;
-        // 网格模式：minmax(250px, 1fr)，加上 gap 2 (8px)，大致 258px 一个
-        const count = Math.floor((containerWidth + 8) / (250 + 8));
+        // 网格模式：minmax(320px, 1fr)，加上 gap 4 (16px)，大致 336px 一个
+        const count = Math.floor((containerWidth + 16) / (320 + 16));
         return Math.max(1, count);
     }, [viewMode, containerWidth]);
 
@@ -251,7 +241,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
     const rowVirtualizer = useVirtualizer({
         count: rowCount,
         getScrollElement: () => parentRef.current,
-        estimateSize: useCallback(() => viewMode === 'list' ? 62 + 8 : 208 + 8, [viewMode]), // 列表项约62px+8px间距，网格约200px+16px间距总和
+        estimateSize: useCallback(() => viewMode === 'list' ? 44 + 6 : 200 + 12, [viewMode]), // 列表项约44px+6px间距，网格约200px+12px间距总和
         overscan: 5,
     });
 
@@ -311,18 +301,18 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                             placeholder={t('Manager.Placeholders.SearchPlugins')}
                             value={searchTerm}
                             onChange={handleSearchChange}
-                            className="pl-8 h-8"
+                            className="pl-8 h-9 rounded-none"
                         />
                     </div>
 
-                    <div className="flex items-center gap-1 border rounded-md p-0.5">
-                        <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" className="h-7 w-7" onClick={() => setViewMode('list')} >
+                    <div className="flex items-center gap-1 border rounded-none p-0.5 h-9 bg-muted/20">
+                        <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" className="h-8 w-8 rounded-none transition-all" onClick={() => setViewMode('list')} >
                             <List className="h-4 w-4" />
                         </Button>
                         <Button
                             variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
                             size="icon"
-                            className="h-7 w-7"
+                            className="h-8 w-8 rounded-none transition-all"
                             onClick={() => setViewMode('grid')}
                         >
                             <LayoutGrid className="h-4 w-4" />
@@ -330,7 +320,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                     </div>
 
                     <Select value={statusFilter} onValueChange={(val: any) => setStatusFilter(val)}>
-                        <SelectTrigger className="w-[120px]" size="sm">
+                        <SelectTrigger className="w-[120px] h-9 rounded-none" size="default">
                             <SelectValue placeholder={t('Manager.Filters.All')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -341,7 +331,7 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                     </Select>
 
                     <Select value={sortType} onValueChange={handleSortChange}>
-                        <SelectTrigger className="w-[120px]" size="sm">
+                        <SelectTrigger className="w-[130px] h-9 rounded-none" size="default">
                             <SelectValue placeholder={t('Common.Data.SortAsc')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -354,16 +344,9 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
             </div>
 
             <ScrollArea className="flex-1 min-h-0" viewportRef={parentRef}>
-                <div className="p-4">
-                    <div
-                        className={cn(
-                            "gap-2 w-full overflow-hidden relative",
-                            viewMode === 'grid' ? "grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))]" : "flex flex-col"
-                        )}
-                        style={{
-                            height: `${rowVirtualizer.getTotalSize()}px`,
-                        }}
-                    >
+                <div className="py-2 px-4">
+                    <div className={cn("gap-2 w-full overflow-hidden relative", viewMode === 'grid' ? "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))]" : "flex flex-col")}
+                        style={{ height: `${rowVirtualizer.getTotalSize()}px`, }}   >
                         {virtualItems.map((virtualRow) => {
                             const startIndex = virtualRow.index * columns;
                             const itemsInRow = displayPlugins.slice(startIndex, startIndex + columns);
@@ -380,8 +363,8 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                                         transform: `translateY(${virtualRow.start}px)`,
                                         display: 'grid',
                                         gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                                        gap: '8px',
-                                        paddingBottom: '8px',
+                                        gap: viewMode === 'list' ? '0px' : '12px',
+                                        paddingBottom: viewMode === 'list' ? '6px' : '12px',
                                     }}
                                 >
                                     {itemsInRow.map((plugin) => (

@@ -3,10 +3,10 @@ import { PluginManifest, Notice } from 'obsidian';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { useTranslation } from 'react-i18next';
-import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal } from 'lucide-react';
 import I18N from 'src/main';
 import { PluginTranslationV1 } from 'src/types';
-import { i18nOpen, isValidPluginTranslationV1Format } from '../../../utils';
+import { i18nOpen, AstTranslator, RegexTranslator, isValidPluginTranslationV1Format } from '../../../utils';
 import { loadTranslationFile } from '../../../manager/io-manager';
 import { useGlobalStoreInstance } from '~/utils';
 import { EDITOR_VIEW_TYPE } from '../../../views';
@@ -34,7 +34,6 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-    DialogClose,
 } from '~/shadcn';
 import { cn } from '~/shadcn/lib/utils';
 
@@ -52,6 +51,8 @@ export interface PluginItemData {
     manifestDoc: string;
     isApplied: boolean;
     isTranslated: boolean;
+    translationVersion?: string;
+    supportedVersion?: string;
 }
 
 interface PluginItemProps {
@@ -71,11 +72,12 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     const [extracting, setExtracting] = useState(false);
     const [replacing, setReplacing] = useState(false);
     const [restoring, setRestoring] = useState(false);
-    const [isWarningOpen, setIsWarningOpen] = useState(false);
+    const [showEmptyDialog, setShowEmptyDialog] = useState(false);
 
     const {
         statusColor, statusText, statusDesc, isLangDoc, langDoc, pluginDir,
-        sources, activeSourceId, translationFormatMark, mainDoc, manifestDoc, isApplied
+        sources, activeSourceId, translationFormatMark, mainDoc, manifestDoc, isApplied,
+        isTranslated, translationVersion, supportedVersion
     } = data;
 
     const sourceManager = i18n.sourceManager;
@@ -109,15 +111,11 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     };
 
     const handleReplace = async () => {
-        if (!data.isTranslated) {
-            setIsWarningOpen(true);
+        if (replacing) return;
+        if (!isApplied && !isTranslated) {
+            setShowEmptyDialog(true);
             return;
         }
-        await confirmReplace();
-    };
-
-    const confirmReplace = async () => {
-        if (replacing) return;
         setReplacing(true);
         try {
             const translationJson: PluginTranslationV1 = loadTranslationFile(langDoc);
@@ -125,18 +123,14 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 const files = Object.keys(translationJson.dict);
                 await i18n.backupManager.createBackup(plugin.id, pluginDir, files);
 
-                // 获取并复用翻译器 (外层获取一次)
-                const astTranslator = i18n.coreManager.getAstTranslator();
-                const regexTranslator = i18n.coreManager.getRegexTranslator();
-
                 for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
                     const targetFilePath = path.join(pluginDir, file);
-                    if (!await fs.pathExists(targetFilePath)) continue;
+                    if (!fs.existsSync(targetFilePath)) continue;
 
-                    const fileBuffer = await fs.readFile(targetFilePath);
-                    let fileString = fileBuffer.toString();
+                    let fileString = fs.readFileSync(targetFilePath).toString();
 
                     if (dict.ast && dict.ast.length > 0) {
+                        const astTranslator = new AstTranslator(i18n.settings);
                         const ast = astTranslator.loadCode(fileString);
                         if (ast) {
                             fileString = astTranslator.translate(ast, dict.ast);
@@ -144,16 +138,18 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                     }
 
                     if (dict.regex && dict.regex.length > 0) {
+                        const regexTranslator = new RegexTranslator(i18n.settings);
                         fileString = regexTranslator.translate(fileString, dict.regex);
                     }
 
                     if (targetFilePath.endsWith('.js')) {
-                        if (!astTranslator.loadCode(fileString)) {
+                        const checkTranslator = new AstTranslator(i18n.settings);
+                        if (!checkTranslator.loadCode(fileString)) {
                             throw new Error(t('Manager.Errors.SyntaxError', { file }));
                         }
                     }
 
-                    await fs.writeFile(targetFilePath, fileString);
+                    fs.writeFileSync(targetFilePath, fileString);
                 }
             }
             i18n.stateManager.setPluginState(plugin.id, {
@@ -167,11 +163,7 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 // @ts-ignore
                 if (reloadRes && !i18n.app.plugins.enabledPlugins.has(plugin.id)) {
                     i18n.notice.error(t('Manager.Errors.LoadFailedAfterApply'));
-                } else {
-                    i18n.notice.successPrefix(t('Manager.Actions.Apply'), t('Manager.Notices.ApplySuccess'));
                 }
-            } else {
-                i18n.notice.successPrefix(t('Manager.Actions.Apply'), t('Manager.Notices.ApplySuccess'));
             }
             refreshParent();
         } catch (error) {
@@ -203,131 +195,139 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
 
     if (viewMode === 'grid') {
         return (
-            <div className="flex flex-col h-[200px] border rounded-lg bg-card text-card-foreground shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 p-3 relative group animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both">
-                <div className="flex justify-between items-start mb-1 gap-1">
-                    <div className="flex flex-col overflow-hidden mr-1 min-w-0">
-                        <span className="font-medium truncate text-sm" title={plugin.name}>{plugin.name}</span>
-                        <span className="text-xs text-muted-foreground">v{plugin.version}</span>
+            <div className="group relative flex flex-col h-[200px] border rounded-none bg-card/85 text-card-foreground shadow-xs hover:shadow-lg hover:bg-muted/30 transition-all duration-300 overflow-hidden border-border/60 backdrop-blur-md">
+                {/* Side Status Accent */}
+                {/* Side Status Accent */}
+                <div className={cn("absolute left-0 top-0 bottom-0 w-[4px] transition-colors duration-300 z-10 bg-opacity-100", statusColor)} />
+
+                <div className="p-4 flex flex-col h-full relative z-0">
+                    <div className="flex justify-between items-start mb-3 gap-2">
+                        <div className="flex flex-col overflow-hidden min-w-0">
+                            <span className="font-bold truncate text-[14px] leading-tight text-foreground/90 group-hover:text-primary transition-colors duration-300" title={plugin.name}>{plugin.name}</span>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-muted-foreground/60 font-semibold tracking-tight bg-muted/30 px-1.5 py-0.5 rounded-none">v{plugin.version}</span>
+                                {translationVersion && (
+                                    <span className="text-[10px] text-primary/80 font-bold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-none">
+                                        v{translationVersion}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                        <div className={cn("px-2 py-0.5 text-[9px] uppercase tracking-widest font-extrabold rounded-none bg-background border border-border shadow-xs flex items-center gap-1.5", statusColor.replace(/bg-/g, 'text-'))}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full shadow-sm animate-pulse-slow", statusColor)}></span>
+                            {statusText}
+                        </div>
                     </div>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger className="flex items-center shrink-0">
-                                <Badge variant="outline" className="shrink-0 pointer-events-none px-2 h-5 text-[10px] whitespace-nowrap gap-1">
-                                    <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
-                                    {statusText}
-                                </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p dangerouslySetInnerHTML={{ __html: statusDesc }}></p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                </div>
-                <div className="flex-1 text-[9px] text-muted-foreground/80 line-clamp-5 overflow-hidden text-ellipsis leading-relaxed break-all" title={plugin.description}>
-                    {plugin.description || t('Common.Status.Unknown')}
-                </div>
-                <div className="flex flex-col gap-2 mt-auto pt-2">
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                        {sources.length > 0 ? (
-                            <Select
-                                value={activeSourceId ?? undefined}
-                                onValueChange={(val) => {
-                                    sourceManager?.setActive(val, true);
-                                    refreshParent();
-                                }}
-                            >
-                                <SelectTrigger className="w-[100px] text-xs px-2" size="sm">
-                                    <SelectValue placeholder={t('Manager.Actions.SelectSource')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {sources.map(source => (
-                                        <SelectItem key={source.id} value={source.id} className="text-xs">
-                                            {source.title}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        ) : <div />}
-                        <div className="flex gap-1">
-                            {isLangDoc && !isApplied && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button variant="default" size="sm" className={cn("h-8 px-3 gap-1 relative overflow-hidden group/btn", !data.isTranslated && "opacity-80")} onClick={handleReplace} disabled={replacing}>
-                                                {replacing ? <Loader2 className="w-3 h-3 animate-spin" /> : (
-                                                    <>
-                                                        {!data.isTranslated && <AlertTriangle className="w-3 h-3 text-yellow-500" />}
-                                                        <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Apply')}</div>
-                                                    </>
-                                                )}
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{t('Manager.Actions.Apply')}</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            )}
-                            {isApplied && (
-                                <TooltipProvider>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button variant="secondary" size="sm" className="h-8 px-3 gap-1 relative overflow-hidden group/btn" onClick={handleRestore} disabled={restoring}>
-                                                {restoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Restore')}</div>}
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>{t('Manager.Actions.Restore')}</TooltipContent>
-                                    </Tooltip>
-                                </TooltipProvider>
-                            )}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="icon" className="h-8 w-8">
-                                        <MoreHorizontal className="w-4 h-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                    {translationFormatMark && isLangDoc && (
-                                        <DropdownMenuItem onClick={() => {
-                                            const pluginTranslationV1 = loadTranslationFile(langDoc);
-                                            useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
-                                            useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
-                                            i18n.view.activateView(EDITOR_VIEW_TYPE);
-                                        }}>
-                                            <Pen className="w-4 h-4 mr-2" />
-                                            <span>{t('Manager.Actions.Edit')}</span>
+
+                    <div
+                        className="flex-1 text-[11px] text-muted-foreground overflow-hidden leading-relaxed break-words font-medium relative"
+                        title={plugin.description}
+                        style={{
+                            WebkitMaskImage: 'linear-gradient(to bottom, black 70%, transparent 100%)',
+                            maskImage: 'linear-gradient(to bottom, black 70%, transparent 100%)'
+                        }}
+                    >
+                        {plugin.description || t('Common.Status.Unknown')}
+                    </div>
+                    <div className="flex flex-col gap-3 mt-auto pt-3 border-t border-border/30">
+                        <div className="flex items-center justify-between gap-2">
+                            {sources.length > 0 ? (
+                                <Select
+                                    value={activeSourceId ?? undefined}
+                                    onValueChange={(val) => {
+                                        sourceManager?.setActive(val, true);
+                                        refreshParent();
+                                    }}
+                                >
+                                    <SelectTrigger className="w-[110px] text-[10px] px-2 h-7 bg-muted/40 border-none shadow-none hover:bg-muted/60 transition-all rounded-none" size="sm">
+                                        <SelectValue placeholder={t('Manager.Actions.SelectSource')} />
+                                    </SelectTrigger>
+                                    <SelectContent className="backdrop-blur-md bg-background/95 border-border/40">
+                                        {sources.map(source => (
+                                            <SelectItem key={source.id} value={source.id} className="text-[11px]">
+                                                {source.title}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : <div />}
+                            <div className="flex gap-2">
+                                {isLangDoc && !isApplied && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="default" size="sm" className="h-7 px-3 text-[10px] font-bold shadow-sm hover:shadow-md hover:bg-primary/90 transition-all active:scale-95 rounded-none" onClick={handleReplace} disabled={replacing}>
+                                                    {replacing && <Loader2 className="w-2.5 h-2.5 animate-spin mr-1" />}
+                                                    {t('Manager.Actions.Apply')}
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-[10px]">{t('Manager.Actions.Apply')}</TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                {isApplied && (
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button variant="outline" size="sm" className="h-7 px-3 text-[10px] font-bold border-border/50 hover:bg-secondary/20 transition-all active:scale-95 rounded-none" onClick={handleRestore} disabled={restoring}>
+                                                    {restoring && <Loader2 className="w-2.5 h-2.5 animate-spin mr-1" />}
+                                                    {t('Manager.Actions.Restore')}
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="text-[10px]">{t('Manager.Actions.Restore')}</TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                )}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 rounded-none hover:bg-muted/50 transition-all">
+                                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-48 shadow-2xl backdrop-blur-md bg-background/95 border-border/40">
+                                        {translationFormatMark && isLangDoc && (
+                                            <DropdownMenuItem onClick={() => {
+                                                const pluginTranslationV1 = loadTranslationFile(langDoc);
+                                                useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
+                                                useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
+                                                i18n.view.activateView(EDITOR_VIEW_TYPE);
+                                            }} className="text-[12px] py-2">
+                                                <Pen className="w-3.5 h-3.5 mr-2.5 text-primary/70" />
+                                                <span>{t('Manager.Actions.Edit')}</span>
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={handleExtract} disabled={extracting} className="text-[12px] py-2">
+                                            <FileOutput className="w-3.5 h-3.5 mr-2.5 text-blue-500/70" />
+                                            <span>{t('Manager.Actions.Extract')}</span>
                                         </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onClick={handleExtract} disabled={extracting}>
-                                        <FileOutput className="w-4 h-4 mr-2" />
-                                        <span>{t('Manager.Actions.Extract')}</span>
-                                    </DropdownMenuItem>
-                                    {activeSourceId && (
-                                        <DropdownMenuItem onClick={() => {
-                                            sourceManager?.removeSource(activeSourceId);
-                                            refreshParent();
-                                        }} className="text-destructive focus:text-destructive">
-                                            <XCircle className="w-4 h-4 mr-2" />
-                                            <span>{t('Manager.Actions.Delete')}</span>
+                                        {activeSourceId && (
+                                            <DropdownMenuItem onClick={() => {
+                                                sourceManager?.removeSource(activeSourceId);
+                                                refreshParent();
+                                            }} className="text-[12px] py-2 text-destructive focus:text-destructive focus:bg-destructive/5">
+                                                <XCircle className="w-3.5 h-3.5 mr-2.5 opacity-70" />
+                                                <span>{t('Manager.Actions.Delete')}</span>
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuSeparator className="bg-border/40" />
+                                        {isEnabled && (
+                                            <DropdownMenuItem onClick={() => {
+                                                // @ts-ignore
+                                                i18n.app.setting.open();
+                                                // @ts-ignore
+                                                i18n.app.setting.openTabById(plugin.id);
+                                            }} className="text-[12px] py-2">
+                                                <Settings className="w-3.5 h-3.5 mr-2.5 text-orange-500/70" />
+                                                <span>{t('Manager.Actions.OpenSettings')}</span>
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={() => i18nOpen(i18n, pluginDir)} className="text-[12px] py-2">
+                                            <FolderOpen className="w-3.5 h-3.5 mr-2.5 text-amber-500/70" />
+                                            <span>{t('Manager.Actions.OpenFolder')}</span>
                                         </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuSeparator />
-                                    {isEnabled && (
-                                        <DropdownMenuItem onClick={() => {
-                                            // @ts-ignore
-                                            i18n.app.setting.open();
-                                            // @ts-ignore
-                                            i18n.app.setting.openTabById(plugin.id);
-                                        }}>
-                                            <Settings className="w-4 h-4 mr-2" />
-                                            <span>{t('Manager.Actions.OpenSettings')}</span>
-                                        </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem onClick={() => i18nOpen(i18n, pluginDir)}>
-                                        <FolderOpen className="w-4 h-4 mr-2" />
-                                        <span>{t('Manager.Actions.OpenFolder')}</span>
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -336,35 +336,29 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     }
 
     return (
-        <div className="border rounded-lg bg-card text-card-foreground shadow-sm hover:shadow-md transition-all duration-200 px-4 py-2 w-full animate-in fade-in slide-in-from-left-2 duration-500 fill-mode-both" style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
-            <div className="flex items-center gap-3 overflow-hidden min-w-0">
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger className="flex items-center shrink-0">
-                            <Badge variant="outline" className="shrink-0 pointer-events-none px-2 h-5 text-[10px] whitespace-nowrap gap-1">
-                                <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
-                                {statusText}
-                            </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            <p dangerouslySetInnerHTML={{ __html: statusDesc }}></p>
-                        </TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                <div className="flex flex-col min-w-0 overflow-hidden">
-                    <div className="flex items-baseline gap-2 min-w-0">
-                        <span className="font-medium truncate text-sm">{plugin.name}</span>
-                        <span className="text-xs text-muted-foreground shrink-0 opacity-80">v{plugin.version}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate" title={plugin.description}>
-                        {plugin.description}
-                    </div>
-                </div>
-            </div>
+        <div className="group relative border rounded-none bg-card/75 text-card-foreground shadow-xs hover:shadow-md hover:bg-muted/20 transition-all duration-300 px-4 py-1.5 w-full border-border/50 overflow-hidden backdrop-blur-md">
+            {/* Side Status Accent */}
+            {/* Side Status Accent */}
+            <div className={cn("absolute left-0 top-0 bottom-0 w-[3px] transition-colors duration-300 z-10 bg-opacity-100", statusColor)} />
 
-            <div className="flex items-center gap-2 shrink-0">
-                {sources.length > 0 && (
-                    <div className="flex items-center gap-1">
+            <div className="flex items-center gap-5 overflow-hidden min-w-0 relative z-0">
+                <div className={cn("px-2.5 py-0.5 text-[9px] uppercase tracking-[0.1em] font-extrabold rounded-none bg-background border border-border shadow-xs flex items-center gap-1.5", statusColor.replace(/bg-/g, 'text-'))}>
+                    <span className={cn("w-1.5 h-1.5 rounded-full shadow-sm", statusColor)}></span>
+                    {statusText}
+                </div>
+
+                <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <span className="font-bold truncate text-[13.5px] text-foreground/90 group-hover:text-primary transition-colors duration-300 shrink-0 max-w-[40%]">{plugin.name}</span>
+                    <span className="text-[10px] text-muted-foreground/50 shrink-0 font-bold bg-muted/20 px-1.5 py-0.5 rounded-none">v{plugin.version}</span>
+                    {translationVersion && (
+                        <span className="text-[10px] text-primary/80 font-bold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-none shrink-0">
+                            v{translationVersion}
+                        </span>
+                    )}
+                </div>
+
+                <div className="flex items-center gap-2.5 ml-auto shrink-0 pl-2">
+                    {sources.length > 0 && (
                         <Select
                             value={activeSourceId ?? undefined}
                             onValueChange={(val) => {
@@ -372,132 +366,130 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                                 refreshParent();
                             }}
                         >
-                            <SelectTrigger className="w-[120px]" size="sm">
+                            <SelectTrigger className="w-[125px] h-8 text-[11px] bg-muted/40 border-none shadow-none hover:bg-muted/60 transition-all rounded-none" size="sm">
                                 <SelectValue placeholder={t('Manager.Actions.SelectSource')} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="backdrop-blur-md bg-background/95 border-border/40">
                                 {sources.map(source => (
-                                    <SelectItem key={source.id} value={source.id}>
+                                    <SelectItem key={source.id} value={source.id} className="text-[11px]">
                                         {source.title}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                    </div>
-                )}
+                    )}
 
-                {translationFormatMark && isLangDoc && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => {
-                                    const pluginTranslationV1 = loadTranslationFile(langDoc);
-                                    useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
-                                    useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
-                                    i18n.view.activateView(EDITOR_VIEW_TYPE);
-                                }}>
-                                    <Pen className="w-4 h-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{t('Manager.Actions.Edit')}</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                )}
-
-                {isLangDoc && !isApplied && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="default" size="sm" className={cn("h-8 px-3 gap-1 relative overflow-hidden group/btn", !data.isTranslated && "opacity-80")} onClick={handleReplace} disabled={replacing}>
-                                    {replacing ? <Loader2 className="w-3 h-3 animate-spin" /> : (
-                                        <>
-                                            {!data.isTranslated && <AlertTriangle className="w-3 h-3 text-yellow-500" />}
-                                            <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Apply')}</div>
-                                        </>
-                                    )}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{t('Manager.Actions.Apply')}</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                )}
-
-                {isApplied && (
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="secondary" size="sm" className="h-8 px-3 gap-1 relative overflow-hidden group/btn" onClick={handleRestore} disabled={restoring}>
-                                    {restoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="transition-transform duration-300 group-hover/btn:scale-110">{t('Manager.Actions.Restore')}</div>}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>{t('Manager.Actions.Restore')}</TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
-                )}
-
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={handleExtract} disabled={extracting}>
-                            <FileOutput className="w-4 h-4 mr-2" />
-                            <span>{t('Manager.Actions.Extract')}</span>
-                        </DropdownMenuItem>
-                        {activeSourceId && (
-                            <DropdownMenuItem onClick={() => {
-                                sourceManager?.removeSource(activeSourceId);
-                                refreshParent();
-                            }} className="text-destructive focus:text-destructive">
-                                <XCircle className="w-4 h-4 mr-2" />
-                                <span>{t('Manager.Actions.Delete')}</span>
-                            </DropdownMenuItem>
+                    <div className="flex items-center gap-1.5">
+                        {translationFormatMark && isLangDoc && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none hover:bg-primary/10 hover:text-primary transition-all" onClick={() => {
+                                            const pluginTranslationV1 = loadTranslationFile(langDoc);
+                                            useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
+                                            useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
+                                            i18n.view.activateView(EDITOR_VIEW_TYPE);
+                                        }}>
+                                            <Pen className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-[10px]">{t('Manager.Actions.Edit')}</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
-                        <DropdownMenuSeparator />
-                        {isEnabled && (
-                            <DropdownMenuItem onClick={() => {
-                                // @ts-ignore
-                                i18n.app.setting.open();
-                                // @ts-ignore
-                                i18n.app.setting.openTabById(plugin.id);
-                            }}>
-                                <Settings className="w-4 h-4 mr-2" />
-                                <span>{t('Manager.Actions.OpenSettings')}</span>
-                            </DropdownMenuItem>
+
+                        {isLangDoc && !isApplied && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="default" size="sm" className="h-8 px-4 text-[11px] font-bold shadow-sm hover:shadow-md hover:translate-y-[-1px] active:scale-95 transition-all rounded-none" onClick={handleReplace} disabled={replacing}>
+                                            {replacing && <Loader2 className="w-3 h-3 animate-spin mr-1.5" />}
+                                            {t('Manager.Actions.Apply')}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-[10px]">{t('Manager.Actions.Apply')}</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                         )}
-                        <DropdownMenuItem onClick={() => i18nOpen(i18n, pluginDir)}>
-                            <FolderOpen className="w-4 h-4 mr-2" />
-                            <span>{t('Manager.Actions.OpenFolder')}</span>
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-            <Dialog open={isWarningOpen} onOpenChange={setIsWarningOpen}>
-                <DialogContent>
+
+                        {isApplied && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button variant="outline" size="sm" className="h-8 px-4 text-[11px] font-bold border-border/50 hover:bg-secondary/20 transition-all active:scale-95 rounded-none" onClick={handleRestore} disabled={restoring}>
+                                            {restoring && <Loader2 className="w-3 h-3 animate-spin mr-1.5" />}
+                                            {t('Manager.Actions.Restore')}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="text-[10px]">{t('Manager.Actions.Restore')}</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none hover:bg-muted/50 transition-all">
+                                    <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48 shadow-2xl backdrop-blur-md bg-background/95 border-border/40">
+                                <DropdownMenuItem onClick={handleExtract} disabled={extracting} className="text-[12px] py-2">
+                                    <FileOutput className="w-3.5 h-3.5 mr-2.5 text-blue-500/70" />
+                                    <span>{t('Manager.Actions.Extract')}</span>
+                                </DropdownMenuItem>
+                                {activeSourceId && (
+                                    <DropdownMenuItem onClick={() => {
+                                        sourceManager?.removeSource(activeSourceId);
+                                        refreshParent();
+                                    }} className="text-[12px] py-2 text-destructive focus:text-destructive focus:bg-destructive/5">
+                                        <XCircle className="w-3.5 h-3.5 mr-2.5 opacity-70" />
+                                        <span>{t('Manager.Actions.Delete')}</span>
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuSeparator className="bg-border/40" />
+                                {isEnabled && (
+                                    <DropdownMenuItem onClick={() => {
+                                        // @ts-ignore
+                                        i18n.app.setting.open();
+                                        // @ts-ignore
+                                        i18n.app.setting.openTabById(plugin.id);
+                                    }} className="text-[12px] py-2">
+                                        <Settings className="w-3.5 h-3.5 mr-2.5 text-orange-500/70" />
+                                        <span>{t('Manager.Actions.OpenSettings')}</span>
+                                    </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => i18nOpen(i18n, pluginDir)} className="text-[12px] py-2">
+                                    <FolderOpen className="w-3.5 h-3.5 mr-2.5 text-amber-500/70" />
+                                    <span>{t('Manager.Actions.OpenFolder')}</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+            {/* Empty Translation Explanation Dialog */}
+            <Dialog open={showEmptyDialog} onOpenChange={setShowEmptyDialog}>
+                <DialogContent className="sm:max-w-[425px] rounded-none border-border/60">
                     <DialogHeader>
-                        <DialogTitle>{t('Manager.Dialogs.EmptyTranslationTitle') || '未检测到翻译内容'}</DialogTitle>
-                        <DialogDescription>
-                            {t('Manager.Dialogs.EmptyTranslationDesc') || '当前选择的翻译源尚未进行任何实质性翻译（译文与原文完全一致）。应用此文件后，插件界面语言将不会发生任何变化。建议您先在编辑器中完成翻译后再应用。'}
+                        <DialogTitle className="flex items-center gap-2 text-amber-500">
+                            <span className="text-xl">⚠️</span>
+                            {t('Manager.Dialogs.EmptyTranslationTitle')}
+                        </DialogTitle>
+                        <DialogDescription className="pt-4 leading-relaxed text-foreground/80">
+                            {t('Manager.Dialogs.EmptyTranslationDesc')}
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="flex gap-2">
-                        <Button variant="outline" onClick={() => {
-                            setIsWarningOpen(false);
-                            const pluginTranslationV1 = loadTranslationFile(langDoc);
-                            useGlobalStoreInstance.getState().setEditorPluginTranslation(pluginTranslationV1);
-                            useGlobalStoreInstance.getState().setEditorPluginTranslationPath(langDoc);
-                            i18n.view.activateView(EDITOR_VIEW_TYPE);
-                        }}>
-                            {t('Manager.Actions.GoToEditor') || '前往编辑器'}
-                        </Button>
-                        <Button variant="default" onClick={() => confirmReplace()}>
-                            {t('Manager.Actions.ContinueApply') || '坚持应用'}
+                    <DialogFooter className="mt-6 flex justify-center">
+                        <Button 
+                            variant="secondary" 
+                            onClick={() => setShowEmptyDialog(false)}
+                            className="w-full rounded-none h-10 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                        >
+                            {t('Common.Actions.Confirm')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 });
