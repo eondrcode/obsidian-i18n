@@ -63,6 +63,18 @@ export class StateManager {
         }
     }
 
+    /**
+     * 清理所有状态记录
+     */
+    public clearAllStates() {
+        this.data = { plugins: {}, themes: {} };
+        this.save();
+    }
+
+    public getAllPluginStates(): Record<string, IState> {
+        return this.data.plugins;
+    }
+
     // --- Theme State Operations (Reserved/Future) ---
 
     public getThemeState(name: string): IState | undefined {

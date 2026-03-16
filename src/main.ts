@@ -10,7 +10,7 @@ import { t } from './locales';
 import { icons } from '~/utils';
 import commands from './command';
 
-import { APIManager, ViewManager, NoticeManager, StateManager, BackupManager, SourceManager, InjectorManager, CoreManager, ExtractManager } from './manager';
+import { APIManager, ViewManager, NoticeManager, StateManager, BackupManager, SourceManager, InjectorManager, CoreManager, ExtractManager, AutoManager } from './manager';
 import { info } from './utils';
 import { OBThemeManifest, Contributor, NameTranslationJSON } from '~/types';
 
@@ -24,6 +24,9 @@ import { ManagerView, MANAGER_VIEW_TYPE } from './views/manager/manager-view';
 import { CloudView, CLOUD_VIEW_TYPE } from './views/cloud/cloud-view';
 import { WizardView, WIZARD_VIEW_TYPE } from './views/wizard';
 
+import * as React from 'react';
+import * as ReactDOM from 'react-dom/client';
+import { DevDebugCard } from './views/manager/dev-debug-card';
 
 // ==============================
 //          [入口] I18n
@@ -45,8 +48,11 @@ export default class I18N extends Plugin {
     sourceManager: SourceManager; // [管理器] 翻译源管理器 
     injectorManager: InjectorManager; // [管理器] 注入管理器 
     coreManager: CoreManager; // [管理器] 核心管理器
-    extractManager: ExtractManager; // [管理器] 提取助手管理器
+    extractManager: ExtractManager; // [管理器] 提取助手管理器1
+    autoManager: AutoManager; // [管理器] 自动化管理器
     activeSettingTab: string = 'basis'; // [变量] 当前设置页激活的选项卡
+
+    private devRoot: ReactDOM.Root | null = null;
 
 
     // [变量] 插件贡献者缓存列表
@@ -65,6 +71,10 @@ export default class I18N extends Plugin {
         icons();                        // [加载] 图标类
         commands(this.app, this);       // [加载] 指令类
         await this.loadSettings();      // [加载] 配置类
+
+        if (process.env.DEV_MODE) {
+            this.initDevDebug();
+        }
 
         this.initManagers();            // [初始化] 管理器
 
@@ -88,6 +98,7 @@ export default class I18N extends Plugin {
     async onunload() {
         this.view.deactivateAllViews(); // 卸载所有视图
         if (this.settings.modeImt) this.coreManager.deactivateIMT();  // 卸载沉浸式翻译
+        this.cleanupDevDebug();
     }
 
     // [配置类] 加载
@@ -172,6 +183,9 @@ export default class I18N extends Plugin {
         // [管理器] 核心管理器
         this.coreManager = new CoreManager(this);
 
+        // [管理器] 自动化管理器
+        this.autoManager = new AutoManager(this);
+
         // [管理器] 提取助手管理器 (暂时隐藏)
         // this.extractManager = new ExtractManager(this);
     }
@@ -213,5 +227,21 @@ export default class I18N extends Plugin {
         this.shareType = type;
         this.sharePath = path;
         this.shareObj = obj;
+    }
+
+    private initDevDebug() {
+        if (!process.env.DEV_MODE) return;
+        const container = document.body.createDiv({ cls: 'i18n-dev-debug-container' });
+        this.devRoot = ReactDOM.createRoot(container);
+        this.devRoot.render(React.createElement(DevDebugCard, { i18n: this }));
+    }
+
+    private cleanupDevDebug() {
+        if (this.devRoot) {
+            this.devRoot.unmount();
+            const container = document.body.querySelector('.i18n-dev-debug-container');
+            if (container) container.remove();
+            this.devRoot = null;
+        }
     }
 }

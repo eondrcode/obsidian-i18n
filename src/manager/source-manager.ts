@@ -13,7 +13,7 @@ import { loadTranslationFile, saveTranslationFile, TRANSLATION_FILE_EXTENSION } 
 
 export class SourceManager {
     private basePath: string;           // i18n插件目录
-    private sourcesDir: string;         // translation-sources目录
+    public sourcesDir: string;         // translation-sources目录
     private metaPath: string;           // meta.json路径
     private checkpointPath: string;     // backup-checkpoint.json路径
     private meta: TranslationSourceMeta;
@@ -93,6 +93,27 @@ export class SourceManager {
      */
     getSource(sourceId: string): TranslationSource | null {
         return this.meta.sources[sourceId] || null;
+    }
+
+    /**
+     * 删除翻译源
+     */
+    deleteSource(sourceId: string): void {
+        if (this.meta.sources[sourceId]) {
+            delete this.meta.sources[sourceId];
+            this.saveMeta();
+        }
+    }
+
+    /**
+     * 清理所有翻译源 (删除文件和元数据)
+     */
+    public clearAll(): void {
+        this.meta.sources = {};
+        if (fs.existsSync(this.sourcesDir)) {
+            fs.emptyDirSync(this.sourcesDir);
+        }
+        this.saveMeta();
     }
 
     /**

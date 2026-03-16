@@ -10,3 +10,4 @@ export * from './injector';
 // 核心管理器
 export * from './core';
 export * from './extract-manager';
+export { AutoManager } from './auto-manager';

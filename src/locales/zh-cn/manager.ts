@@ -57,7 +57,10 @@ export default {
         NoTrans: "未翻译",
         Reloading: "重载中...",
         NoPlugins: "未发现插件",
-        NoThemes: "未发现主题"
+        NoThemes: "未发现主题",
+        AutoStarting: "正在启动一键自动化处理...",
+        ScanningInstalled: "正在扫描已安装项 ({{count}})...",
+        Running: "自动化任务正在运行中"
     },
     Dialogs: {
         EmptyTranslationTitle: "未检测到翻译内容",
@@ -74,7 +77,8 @@ export default {
         ThemeExtractPrefix: "提取译文",
         ThemeApplyPrefix: "主题应用",
         ThemeRestorePrefix: "主题还原",
-        ApplySuccess: "翻译应用成功"
+        ApplySuccess: "翻译应用成功",
+        AutoFillComplete: "自动化处理完成: 成功 {{success}} 项, 跳过 {{skip}} 项"
     },
     Errors: {
         Error: "错误",
@@ -87,6 +91,8 @@ export default {
         ThemeCssNotFound: "未找到 theme.css 文件",
         NoSettingsBlock: "未找到 @settings 块，无可翻译内容",
         MainNotFound: "未找到 main.js 文件",
-        BackupNotFound: "备份文件不存在，无法还原"
+        BackupNotFound: "备份文件不存在，无法还原",
+        FetchCommunityDataFailed: "获取社区注册表数据失败，请检查网络",
+        AutoFailed: "自动化处理过程中发生错误"
     }
 } as const;

@@ -5,10 +5,11 @@ import I18N from 'src/main';
 import { Tabs, TabsContent, TabsList, TabsTrigger, Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/shadcn';
 import { PluginManager } from './plugin-manager';
 import { ThemeManager } from './theme-manager';
-import { LayoutGrid, Palette, Settings, Cloud, CircleHelp, RefreshCw, Loader2, Coffee } from 'lucide-react';
+import { LayoutGrid, Palette, Settings, Cloud, CircleHelp, RefreshCw, Loader2, Coffee, Zap } from 'lucide-react';
 import Url from 'src/constants/url';
 import { WIZARD_VIEW_TYPE } from '../../views';
 import { CLOUD_VIEW_TYPE } from '../cloud';
+import { DevDebugCard } from './dev-debug-card';
 
 interface ManagerLayoutProps {
     i18n: I18N;
@@ -18,28 +19,16 @@ interface ManagerLayoutProps {
 export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => {
     const { t } = useTranslation();
     const app = i18n.app;
-    const [isReloading, setIsReloading] = useState(false);
+    const [isAutoRunning, setIsAutoRunning] = useState(false);
 
-    const handleReloadI18n = useCallback(async () => {
-        setIsReloading(true);
+    const handleSmartAuto = useCallback(async () => {
+        setIsAutoRunning(true);
         try {
-            const currentPluginId = i18n.manifest.id;
-            // @ts-ignore
-            if (app.plugins.enabledPlugins.has(currentPluginId)) {
-                // @ts-ignore
-                await app.plugins.disablePlugin(currentPluginId);
-                // @ts-ignore
-                await app.plugins.enablePlugin(currentPluginId);
-                new Notice(t('Manager.Notices.ReloadSuccess'));
-            } else {
-                new Notice(t('Manager.Errors.PluginNotEnabled'));
-                setIsReloading(false);
-            }
-        } catch (error) {
-            new Notice(`${t('Manager.Errors.ReloadFailed')}: ${error}`);
-            setIsReloading(false);
+            await i18n.autoManager.runSmartAuto();
+        } finally {
+            setIsAutoRunning(false);
         }
-    }, [app, i18n.manifest.id, t]);
+    }, [i18n.autoManager]);
 
     return (
         <div className="flex flex-col h-full bg-background overflow-hidden">
@@ -60,6 +49,23 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
 
                     {/* 右侧：功能按钮组 */}
                     <div className="flex items-center border rounded-none divide-x bg-background shadow-sm overflow-hidden">
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        className="rounded-none h-9 px-3 hover:bg-muted gap-2 text-xs text-yellow-600 dark:text-yellow-500 font-bold"
+                                        onClick={handleSmartAuto}
+                                        disabled={isAutoRunning}
+                                    >
+                                        {isAutoRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 fill-current" />}
+                                        <span>{isAutoRunning ? t('Manager.Status.Running') : t('Manager.Actions.Apply')}</span>
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>一键自动化处理全部翻译</TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+
                         <TooltipProvider>
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -114,20 +120,6 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
                                 <TooltipContent>{t('Manager.Actions.Settings')}</TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                        {/* 刷新 (仅开发模式展示) */}
-                        {process.env.DEV_MODE && (
-                            <TooltipProvider>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button variant="ghost" className="rounded-none h-9 px-3 hover:bg-muted gap-2 text-xs" onClick={handleReloadI18n} disabled={isReloading}>
-                                            {isReloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                                            <span>{isReloading ? t('Manager.Status.Reloading') : t('Manager.Actions.Reload')}</span>
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{t('Manager.Actions.Reload')}</TooltipContent>
-                                </Tooltip>
-                            </TooltipProvider>
-                        )}
                     </div>
                 </div>
 

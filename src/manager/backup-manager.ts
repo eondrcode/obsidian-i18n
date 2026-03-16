@@ -214,4 +214,23 @@ export class BackupManager {
             await fs.remove(legacyUncompressedPath);
         }
     }
+
+    /**
+     * 备份单个翻译源文件 (同步版)
+     */
+    public backupTranslationSync(sourceId: string, sourcesDir: string): void {
+        const sourcePath = path.join(sourcesDir, `${sourceId}.json`);
+        const backupPath = path.join(this.backupDir, 'translations', `${sourceId}.json.gz`);
+
+        try {
+            if (!fs.existsSync(sourcePath)) return;
+
+            fs.ensureDirSync(path.dirname(backupPath));
+            const content = fs.readFileSync(sourcePath);
+            const compressed = zlib.gzipSync(content);
+            fs.writeFileSync(backupPath, compressed);
+        } catch (error) {
+            console.error(`[i18n] Backup translation sync failed for [${sourceId}]:`, error);
+        }
+    }
 }
