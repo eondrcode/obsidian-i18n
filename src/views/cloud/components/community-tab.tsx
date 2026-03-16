@@ -5,7 +5,7 @@
 import React, { useCallback, useState, useMemo, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Input, Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/src/shadcn';
-import { Search, RefreshCw, Globe, Star, Layers, Github, ExternalLink, Users, ArrowRight, Trophy, ChevronDown, TrendingUp, Palette, Library, Plus, Zap, CircleCheckBig, FileText } from 'lucide-react';
+import { Search, RefreshCw, Globe, Star, Layers, Github, ExternalLink, Users, ArrowRight, Trophy, ChevronDown, TrendingUp, Palette, Library, Plus, Zap, CircleCheckBig, FileText, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useCloudStore } from '../cloud-store';
 import { useGlobalStoreInstance } from '~/utils';
@@ -37,6 +37,7 @@ export const CommunityTab: React.FC = () => {
     const setCommunityStats = useCloudStore.use.setCommunityStats();
     const setCommunityLoaded = useCloudStore.use.setCommunityLoaded();
     const setCommunityLoading = useCloudStore.use.setCommunityLoading();
+    const fetchCommunityRegistry = useCloudStore.use.fetchCommunityRegistry();
     const setCurrentTab = useCloudStore.use.setCurrentTab();
     const setTargetRepoAddress = useCloudStore.use.setTargetRepoAddress();
 
@@ -51,63 +52,12 @@ export const CommunityTab: React.FC = () => {
 
     const [isRateLimited, setIsRateLimited] = useState(false);
 
-    // 加载社区数据
-    const loadCommunityData = useCallback(async (force = false) => {
-        if (communityLoading) return;
-        if (communityLoaded && !force) return;
-
-        setCommunityLoading(true);
-        setIsRateLimited(false);
-        try {
-            const registryAddr = 'eondrcode/obsidian-i18n-resources';
-            if (!registryAddr) return;
-
-            const [owner, repo] = registryAddr.split('/');
-            if (!owner || !repo) return;
-
-            // 并发加载 registry.json 和 stats.json (自动降级以支持大文件和绕过部分频率限制)
-            const [registryRes, statsRes] = await Promise.all([
-                i18n.api.github.getFileContentWithFallback(owner, repo, 'registry.json'),
-                i18n.api.github.getFileContentWithFallback(owner, repo, 'stats.json'),
-            ]);
-
-            // 检查频率限制
-            if (registryRes.isRateLimit || statsRes.isRateLimit) {
-                setIsRateLimited(true);
-            }
-
-            // 解析 registry.json
-            if (registryRes.state && registryRes.data) {
-                const parsed = registryRes.data;
-                if (Array.isArray(parsed)) {
-                    setCommunityRegistry(parsed);
-                }
-            }
-
-            // 解析 stats.json
-            if (statsRes.state && statsRes.data) {
-                const parsed = statsRes.data;
-                if (parsed && typeof parsed === 'object') {
-                    setCommunityStats(parsed);
-                }
-            }
-
-            if (registryRes.state || statsRes.state) {
-                setCommunityLoaded(true);
-            }
-        } catch (error) {
-            console.error(t_i18n('Cloud.Errors.FetchFail'), error);
-        } finally {
-            setCommunityLoading(false);
-        }
-    }, [communityLoading, communityLoaded, i18n, setCommunityRegistry, setCommunityStats, setCommunityLoaded, setCommunityLoading, t_i18n]);
-
     // 首次挂载自动加载
     React.useEffect(() => {
         if (!communityLoaded && !communityLoading) {
-            loadCommunityData();
+            fetchCommunityRegistry(i18n);
         }
-    }, [communityLoaded, communityLoading, loadCommunityData]);
+    }, [communityLoaded, communityLoading, fetchCommunityRegistry, i18n]);
 
     // ========== 排行榜数据（优先使用服务端预计算，fallback 到客户端计算）==========
     const topRepos = useMemo<LeaderboardRepo[]>(() => {
@@ -188,26 +138,55 @@ export const CommunityTab: React.FC = () => {
 
     // 过滤逻辑
     const filteredItems = useMemo(() => {
-        return communityRegistry.filter((item) => {
-            const stats = communityStats?.repos?.[item.repoAddress];
+        return communityRegistry
+            .filter((item) => {
+                const stats = communityStats?.repos?.[item.repoAddress];
 
-            // 搜索过滤
-            if (searchQuery) {
-                const q = searchQuery.toLowerCase();
-                const matchAddress = item.repoAddress.toLowerCase().includes(q);
-                const matchDesc = stats?.description?.toLowerCase().includes(q) || false;
-                const matchAuthor = stats?.authorName?.toLowerCase().includes(q) || false;
-                if (!matchAddress && !matchDesc && !matchAuthor) return false;
-            }
+                // 搜索过滤
+                if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    const matchAddress = item.repoAddress.toLowerCase().includes(q);
+                    const matchDesc = stats?.description?.toLowerCase().includes(q) || false;
+                    const matchAuthor = stats?.authorName?.toLowerCase().includes(q) || false;
+                    if (!matchAddress && !matchDesc && !matchAuthor) return false;
+                }
 
-            // 语言过滤
-            if (filterLanguage && filterLanguage !== 'all') {
-                if (!stats?.languages?.includes(filterLanguage)) return false;
-            }
+                // 语言过滤
+                if (filterLanguage && filterLanguage !== 'all') {
+                    if (!stats?.languages?.includes(filterLanguage)) return false;
+                }
 
-            return true;
-        });
+                return true;
+            })
+            .sort((a, b) => {
+                // 1. 优先级权重：官方且精选 > 官方 > 精选 > 普通
+                const getWeight = (item: RegistryItem) => {
+                    if (item.isOfficial && item.isFeatured) return 3;
+                    if (item.isOfficial) return 2;
+                    if (item.isFeatured) return 1;
+                    return 0;
+                };
+
+                const weightA = getWeight(a);
+                const weightB = getWeight(b);
+
+                if (weightA !== weightB) return weightB - weightA;
+
+                // 2. 权重埃等时，按星标降序
+                const statsA = communityStats?.repos?.[a.repoAddress];
+                const statsB = communityStats?.repos?.[b.repoAddress];
+                const starsA = statsA?.stars || 0;
+                const starsB = statsB?.stars || 0;
+
+                if (starsA !== starsB) return starsB - starsA;
+
+                // 3. 最后按活跃度降序
+                return (statsB?.activityScore || 0) - (statsA?.activityScore || 0);
+            });
     }, [communityRegistry, communityStats, searchQuery, filterLanguage]);
+
+
+
 
 
     // 点击查看仓库
@@ -232,6 +211,18 @@ export const CommunityTab: React.FC = () => {
     const topAuthors = useMemo(() => {
         return communityStats?.leaderboard?.topAuthors || [];
     }, [communityStats]);
+
+    // 作者称号映射 (从注册索引中提取手动指定的称号)
+    const authorBadgeMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        communityRegistry.forEach(item => {
+            if (item.authorBadge) {
+                const [owner] = item.repoAddress.split('/');
+                map[owner] = item.authorBadge;
+            }
+        });
+        return map;
+    }, [communityRegistry]);
 
     const totalContributors = useMemo(() => {
         if (!communityStats?.repos) return 0;
@@ -263,7 +254,7 @@ export const CommunityTab: React.FC = () => {
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Globe className="w-16 h-16 mb-4 opacity-20" />
                 <p className="text-sm font-medium">{t_i18n('Cloud.Errors.FetchFail')}</p>
-                <Button variant="link" size="sm" onClick={() => loadCommunityData(true)} className="mt-2">
+                <Button variant="link" size="sm" onClick={() => fetchCommunityRegistry(i18n)} className="mt-2">
                     {t_i18n('Cloud.Actions.Recheck')}
                 </Button>
             </div>
@@ -296,7 +287,7 @@ export const CommunityTab: React.FC = () => {
                     {t_i18n('Cloud.Hints.RateLimitGuide')}
                     <ArrowRight className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => loadCommunityData(true)} className="text-xs text-muted-foreground">
+                <Button variant="ghost" size="sm" onClick={() => fetchCommunityRegistry(i18n)} className="text-xs text-muted-foreground">
                     <RefreshCw className="w-3 h-3 mr-1.5" />
                     {t_i18n('Cloud.Actions.Recheck')}
                 </Button>
@@ -443,8 +434,13 @@ export const CommunityTab: React.FC = () => {
                                                         )}
                                                         {/* 信息 */}
                                                         <div className="flex-1 min-w-0">
-                                                            <div className="text-[11px] font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+                                                            <div className="text-[11px] font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors flex items-center gap-1.5">
                                                                 {author.name}
+                                                                {authorBadgeMap[author.name] && (
+                                                                    <Badge variant="outline" className="h-3.5 px-1 text-[8px] border-primary/30 text-primary bg-primary/5 font-black uppercase tracking-tighter shrink-0">
+                                                                        {authorBadgeMap[author.name]}
+                                                                    </Badge>
+                                                                )}
                                                             </div>
                                                             <div className="text-[9px] text-muted-foreground/60 truncate flex gap-1 items-center">
                                                                 <span>{author.repoCount} {t_i18n('Cloud.Labels.SubscriptionRepo')}</span>
@@ -679,7 +675,7 @@ export const CommunityTab: React.FC = () => {
                                 variant="ghost"
                                 size="icon"
                                 className="h-full w-8 rounded-none rounded-r-md hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-                                onClick={() => loadCommunityData(true)}
+                                onClick={() => fetchCommunityRegistry(i18n)}
                                 disabled={communityLoading}
                             >
                                 <RefreshCw className={cn("w-3.5 h-3.5", communityLoading && "animate-spin")} />
@@ -687,6 +683,8 @@ export const CommunityTab: React.FC = () => {
                         </div>
                     </div>
                 </div>
+
+
 
                 {/* 卡片网格 */}
                 <CommunityReposList
@@ -713,16 +711,22 @@ const CommunityRepoCard: React.FC<CommunityRepoCardProps> = ({ item, stats, onVi
 
     return (
         <div className={cn(
-            "group flex flex-col overflow-hidden bg-card text-card-foreground rounded-lg border border-border/60 transition-all duration-300 animate-in fade-in h-[188px] relative select-none",
-            "hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] hover:border-primary/40",
+            "group flex flex-col overflow-hidden bg-card text-card-foreground rounded-lg border border-border/60 transition-all duration-300 animate-in fade-in h-[196px] relative select-none",
+            "hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:hover:shadow-[0_8px_30px_rgb(0,0,0,0.2)] hover:border-primary/40"
         )}>
+            {/* 星标：移至右上角绝对定位，对齐内边距 */}
+            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 shadow-sm z-10 transition-transform group-hover:scale-105">
+                <Star className="w-3 h-3 text-amber-500 fill-amber-500/20" />
+                <span className="text-[10px] font-black text-amber-600/90">{stats?.stars || 0}</span>
+            </div>
+
             {/* 内容主干 */}
             <div className="flex flex-col flex-1 p-4 pb-3 min-h-0 space-y-3">
                 {/* 头部：头像 + 仓库名 */}
                 <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <div className={cn(
-                            "flex items-center justify-center w-9 h-9 rounded-md shrink-0 shadow-sm border border-border/10 transition-colors overflow-hidden",
+                            "flex items-center justify-center w-8 h-8 rounded-lg shrink-0 shadow-sm border border-border/10 transition-colors overflow-hidden",
                             "bg-muted/50 group-hover:bg-muted"
                         )}>
                             {stats?.avatarUrl ? (
@@ -732,32 +736,47 @@ const CommunityRepoCard: React.FC<CommunityRepoCardProps> = ({ item, stats, onVi
                                     alt={owner}
                                 />
                             ) : (
-                                stats?.description?.toLowerCase().includes('theme') || stats?.repoName?.toLowerCase().includes('theme') ? (
-                                    <Palette className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                                ) : (
-                                    <Layers className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                                )
+                                <Layers className="w-4 h-4 text-muted-foreground/60" />
                             )}
                         </div>
-                        <div className="min-w-0 flex-1">
-                            <h3 className="text-[13px] font-semibold text-foreground tracking-tight leading-snug truncate" title={item.repoAddress}>
-                                {repo}
-                            </h3>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[10px] text-muted-foreground/60 font-medium tracking-tight truncate">{stats?.authorName || owner}</span>
+                        <div className="min-w-0 flex-1 pr-14">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                <h3 className="text-[12px] font-extrabold text-foreground tracking-tight leading-none truncate" title={item.repoAddress}>
+                                    {repo}
+                                </h3>
+                                {item.isOfficial && (
+                                    <span title={t('Cloud.Labels.Official')} className="shrink-0 flex items-center">
+                                        <ShieldCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500/10" />
+                                    </span>
+                                )}
+                                {item.isFeatured && (
+                                    <span title={t('Cloud.Labels.Featured')} className="shrink-0 flex items-center">
+                                        <Zap className="w-3.5 h-3.5 text-orange-500 fill-orange-500/10" />
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                                <span className="text-[9px] text-muted-foreground/60 font-bold uppercase tracking-wider truncate">{stats?.authorName || owner}</span>
+                                {item.authorBadge && (
+                                    <Badge variant="outline" className="h-[14px] px-1 text-[7px] border-primary/20 text-primary/80 bg-primary/5 font-black uppercase tracking-tighter">
+                                        {item.authorBadge}
+                                    </Badge>
+                                )}
                             </div>
                         </div>
                     </div>
-
-                    <div className="flex items-center shrink-0 pt-0.5">
-                        {stats?.stars !== undefined && (
-                            <div className="p-1 px-2 rounded-sm bg-yellow-500/5 border border-yellow-500/10 text-yellow-600/80 text-[10px] font-bold tracking-tight uppercase flex items-center gap-1">
-                                <Star className="w-3 h-3 fill-current opacity-70" />
-                                {stats.stars}
-                            </div>
-                        )}
-                    </div>
                 </div>
+
+                {/* 标签快读区 */}
+                {item.badges && item.badges.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                        {item.badges.map((badge, idx) => (
+                            <Badge key={idx} variant="secondary" className="h-[15px] px-1.5 text-[8px] font-bold bg-muted/40 text-muted-foreground/80 border-none rounded">
+                                {badge}
+                            </Badge>
+                        ))}
+                    </div>
+                )}
 
                 {/* 描述 */}
                 <div className="min-h-[34px] max-h-[34px] overflow-hidden">
@@ -766,27 +785,26 @@ const CommunityRepoCard: React.FC<CommunityRepoCardProps> = ({ item, stats, onVi
                     </p>
                 </div>
 
-                {/* 元数据区域 */}
-                <div className="mt-auto flex items-center justify-between px-2.5 py-1.5 rounded bg-muted/20 border border-border/5">
-                    <div className="flex items-center gap-3">
-                        {stats?.languages?.slice(0, 1).map((lang) => (
-                            <div key={lang} className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70 font-semibold">
-                                <Globe className="w-3 h-3 opacity-50" />
-                                {lang}
+                {/* 元数据区域 - 增强统计集 */}
+                <div className="mt-auto grid grid-cols-2 gap-1.5">
+                    <div className="flex items-center justify-between px-2 py-1 rounded bg-muted/20 border border-border/5">
+                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/70 font-bold uppercase tracking-tighter">
+                            <Globe className="w-2.5 h-2.5 opacity-40" />
+                            {stats?.languages?.[0] || 'ZH'}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/70 font-bold">
+                            <div className="flex items-center gap-1.5" title={t('Cloud.Labels.PublishedResources')}>
+                                <Library className="w-2.5 h-2.5 opacity-40 text-blue-500" />
+                                <span>{(stats?.pluginCount || 0) + (stats?.themeCount || 0)}</span>
                             </div>
-                        ))}
-                        {stats?.languages && stats.languages.length > 1 && <div className="w-[1px] h-2 bg-border/20" />}
-                        {stats?.pluginCount !== undefined && (
-                            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70 font-semibold">
-                                <Layers className="w-3 h-3 opacity-50" />
-                                {stats.pluginCount} {t('Cloud.Labels.UnitPlugins')}
-                            </div>
-                        )}
+                        </div>
                     </div>
-
-                    <span className="text-[9px] text-muted-foreground/50 font-mono tracking-tight truncate max-w-[80px]">
-                        {owner}
-                    </span>
+                    <div className="flex items-center justify-between px-2 py-1 rounded bg-muted/20 border border-border/5">
+                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/70 font-bold">
+                            <TrendingUp className="w-2.5 h-2.5 opacity-40 text-emerald-500" />
+                            {stats?.activityScore !== undefined ? Math.round(stats.activityScore * 100) : 0}
+                        </div>
+                    </div>
                 </div>
             </div>
 

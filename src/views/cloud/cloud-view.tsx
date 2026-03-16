@@ -46,11 +46,10 @@ const CloudViewContent: React.FC = () => {
     const setRepoChecking = useCloudStore.use.setRepoChecking();
     const setRepoInitialized = useCloudStore.use.setRepoInitialized();
     const setRepoManifest = useCloudStore.use.setRepoManifest();
-    const setGithubUser = useCloudStore.use.setGithubUser();
-    const setCanCreateRepo = useCloudStore.use.setCanCreateRepo();
     const setMyRepoInfo = useCloudStore.use.setMyRepoInfo();
     const setMyRepoReadme = useCloudStore.use.setMyRepoReadme();
     const setRepoNameInput = useCloudStore.use.setRepoNameInput();
+    const fetchGithubUser = useCloudStore.use.fetchGithubUser();
 
     // 仓库初始化逻辑 — 只在视图首次挂载（或 reset 后）执行一次
     React.useEffect(() => {
@@ -68,28 +67,12 @@ const CloudViewContent: React.FC = () => {
         const init = async () => {
             setRepoChecking(true);
             try {
-                // 1. 获取用户信息
-                const userRes = await i18n.api.github.getUser();
+                // 1. 获取/刷新用户信息 (使用 Store 统一动作)
+                await fetchGithubUser(i18n);
                 if (cancelled) return;
-                if (!userRes.state) return;
-
-                const user = {
-                    login: userRes.data.login,
-                    id: userRes.data.id,
-                    avatar_url: userRes.data.avatar_url,
-                    name: userRes.data.name,
-                    followers: userRes.data.followers,
-                    following: userRes.data.following,
-                    public_repos: userRes.data.public_repos,
-                    created_at: userRes.data.created_at,
-                    bio: userRes.data.bio,
-                };
-                setGithubUser(user);
-
-                // 2. 解析 Token 权限
-                const scopes: string[] = userRes.scopes || [];
-                const canCreate = scopes.includes('public_repo') || scopes.includes('repo');
-                setCanCreateRepo(canCreate);
+                
+                const user = useCloudStore.getState().githubUser;
+                if (!user) return;
 
                 // 3. 如果未配置仓库名，直接标记未初始化
                 if (!userRepo) {

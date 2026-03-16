@@ -33,7 +33,14 @@ export default {
         AuthorPlaceholder: "请输入作者署名",
         ManagerTitle: "插件管理器",
         ManagerDesc: "访问插件管理器外部链接。",
-        ManagerBtn: "前往管理器"
+        ManagerBtn: "前往管理器",
+        AutoHeader: "自动化管理 (实验性)",
+        AutoMonitorTitle: "自动监测插件安装",
+        AutoMonitorDesc: "当您安装或启用新插件时，自动在云端匹配最佳翻译并应用。",
+        AutoStartupTitle: "启动时自动检查",
+        AutoStartupDesc: "Obsidian 启动时自动全量扫描已安装插件的翻译更新。",
+        AutoSilentTitle: "静默运行模式",
+        AutoSilentDesc: "自动执行任务时不弹出进度通知，仅在成功后简要提醒。"
     },
     Re: {
         ParamsHeader: "正则参数配置",

@@ -252,7 +252,14 @@ export default {
         TotalTranslations: "全局总翻译数",
         TotalContributors: "全局总贡献者",
         TotalStars: "星标总计",
-        LocalResource: "本地已安装资源"
+        LocalResource: "本地已安装资源",
+        // 推荐与荣誉
+        Official: "官方推荐",
+        Featured: "社区精选",
+        RecommendReason: "推荐理由",
+        MasterTranslator: "翻译巨匠",
+        RisingStar: "社区新星",
+        LegendaryRepo: "万众瞩目"
     },
     Placeholders: {
         RepoName: "例如: my-obsidian-i18n-resources",

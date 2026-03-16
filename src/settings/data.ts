@@ -99,6 +99,13 @@ export interface I18nSettings {
     pluginViewMode: 'list' | 'grid'; // 插件管理器视图模式
     themeViewMode: 'list' | 'grid'; // 主题管理器视图模式
     autoSave: boolean;        // 编辑器是否开启自动保存
+    // ==============================
+    // 自动化设置 (AutoManager)
+    // ==============================
+    autoMonitor: boolean;     // 是否自动监听插件变化并匹配翻译
+    autoCheckOnStartup: boolean; // 是否在启动时自动执行静默扫描
+    autoSilentMode: boolean;   // 自动模式是否开启静默匹配（不弹出通知）
+    lastAutoCheckTime: number; // 上次自动检查的时间戳
 }
 
 export const DEFAULT_SETTINGS: I18nSettings = {
@@ -220,4 +227,12 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     pluginViewMode: 'list',
     themeViewMode: 'grid',
     autoSave: true,
+
+    // ==============================
+    // 自动化设置 (AutoManager)
+    // ==============================
+    autoMonitor: false,         // 默认开启自动监听
+    autoCheckOnStartup: false, // 默认关闭启动检查（避免启动过慢）
+    autoSilentMode: false,     // 默认不进入完成静默模式（方便用户感知）
+    lastAutoCheckTime: 0,
 }

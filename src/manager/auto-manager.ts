@@ -16,18 +16,65 @@ export class AutoManager {
     }
 
     /**
+     * 自动模式启动入口
+     */
+    public async initialize() {
+        // 1. 注册监听器
+        this.setupEventListeners();
+
+        // 2. 检查是否开启启动自检
+        if (this.i18n.settings.autoCheckOnStartup) {
+            // 延迟运行，确保 Obsidian 完全加载
+            setTimeout(() => this.runSmartAuto({ silent: true }), 3000);
+        }
+    }
+
+    /**
+     * 监听插件安装和布局变化
+     */
+    private setupEventListeners() {
+        // 监听插件启用事件（安装并启用时触发）
+        // 注意：Obsidian 官方 API 可能不直接暴露所有内部事件，通常监听 layout-change 比较稳健
+        // 但也可以尝试 Hook 插件管理器的内部事件
+        this.i18n.registerEvent(
+            this.i18n.app.workspace.on('layout-change', () => {
+                if (!this.i18n.settings.autoMonitor) return;
+                this.handleLayoutChange();
+            })
+        );
+
+        // 每隔 24 小时自动更新一次注册表缓存（待实现缓存逻辑后增强）
+    }
+
+    private lastScanTime = 0;
+    private handleLayoutChange() {
+        if (this.isRunning) return;
+        const now = Date.now();
+        // 频率限制：5 分钟内不重复扫描
+        if (now - this.lastScanTime < 5 * 60 * 1000) return;
+
+        this.lastScanTime = now;
+        this.runSmartAuto({ silent: true, isIncremental: true });
+    }
+
+    /**
      * 一键智能自动化处理
      */
-    public async runSmartAuto() {
+    public async runSmartAuto(options: { silent?: boolean, isIncremental?: boolean } = {}) {
         if (this.isRunning) {
-            new Notice(t('Manager.Status.Running'));
+            if (!options.silent) new Notice(t('Manager.Status.Running'));
             return;
         }
 
+        const isSilent = options.silent || this.i18n.settings.autoSilentMode;
+
         this.isRunning = true;
-        this.i18n.notice.info(t('Manager.Status.AutoStarting'));
+        if (!isSilent) this.i18n.notice.info(t('Manager.Status.AutoStarting'));
 
         try {
+            // 0. 验证版本状态（检测是否有插件已更新导致翻译失效）
+            await this.i18n.stateManager.validateVersions(this.i18n.app);
+
             // 1. 获取社区注册表和统计数据
             const registryAddr = 'eondrcode/obsidian-i18n-resources';
             const [owner, repo] = registryAddr.split('/');
@@ -48,12 +95,29 @@ export class AutoManager {
             console.log('[AutoManager] Registry count:', registry.length);
             console.log('[AutoManager] Stats repos count:', Object.keys(stats.repos || {}).length);
 
-            // 2. 扫描已安装项
             const installedPlugins = this.getInstalledPlugins();
             const installedThemes = await this.getInstalledThemes();
-            const allInstalled = [...installedPlugins, ...installedThemes];
+            let allInstalled = [...installedPlugins, ...installedThemes];
 
-            this.i18n.notice.info(t('Manager.Status.ScanningInstalled', { count: allInstalled.length }));
+            // 增量更新逻辑：关注没被激活过的插件，或者版本号发生变动的插件
+            if (options.isIncremental) {
+                allInstalled = allInstalled.filter(item => {
+                    const state = this.i18n.stateManager.getPluginState(item.id);
+                    // 情况1：从未应用过翻译
+                    if (!state || !state.isApplied) return true;
+                    // 情况2：已应用过翻译，但本地 manifest 版本与 state 记录的版本不一致（说明插件刚更新过）
+                    if (item.version !== state.pluginVersion) return true;
+
+                    return false;
+                });
+
+                if (allInstalled.length === 0) {
+                    this.isRunning = false;
+                    return;
+                }
+            }
+
+            if (!isSilent) this.i18n.notice.info(t('Manager.Status.ScanningInstalled', { count: allInstalled.length }));
 
             // 3. 批量获取所有受信任仓库的元数据
             // 优化过滤逻辑：如果 stats 为空或不包含 pluginIds，则不进行严格过滤，尝试加载所有 registry 中的库
@@ -82,7 +146,7 @@ export class AutoManager {
             }));
 
             console.log('[AutoManager] Total manifests fetched:', allManifests.length);
-            this.i18n.notice.info(`正在解析 ${allManifests.length} 个云端翻译条目...`);
+            if (!isSilent) this.i18n.notice.info(`正在解析 ${allManifests.length} 个云端翻译条目...`);
 
             // 4. 为每个已安装项寻找最佳翻译
             let successCount = 0;
@@ -105,7 +169,9 @@ export class AutoManager {
                     if (existing && existing.cloud?.hash === bestMatch.entry.hash) {
                         // 即使 Hash 一致，如果尚未应用，也需要尝试应用
                         const state = this.i18n.stateManager.getPluginState(installed.id);
-                        if (state?.isApplied && state?.translationVersion === bestMatch.entry.version) {
+                        if (state?.isApplied &&
+                            state?.translationVersion === bestMatch.entry.version &&
+                            state?.pluginVersion === installed.version) {
                             upToDateCount++;
                             continue;
                         }
@@ -133,10 +199,16 @@ export class AutoManager {
             }
 
             if (successCount === 0 && upToDateCount === 0 && errorCount === 0) {
-                this.i18n.notice.warning(`未在社区库中找到匹配的翻译 (跳过: ${skipCount})`);
-            } else {
+                if (!isSilent) this.i18n.notice.warning(`未在社区库中找到匹配的翻译 (跳过: ${skipCount})`);
+            } else if (!isSilent) {
                 this.i18n.notice.success(`一键处理完成！统计：成功 ${successCount}，已最新 ${upToDateCount}，失败 ${errorCount}，未找到 ${skipCount}`);
+            } else if (successCount > 0) {
+                this.i18n.notice.success(`自动已为 ${successCount} 个新插件应用翻译`);
             }
+
+            // 更新最后检查时间
+            this.i18n.settings.lastAutoCheckTime = Date.now();
+            await this.i18n.saveSettings();
         } catch (error) {
             console.error('[AutoManager] Smart Auto failed:', error);
             this.i18n.notice.error(`${t('Manager.Errors.AutoFailed')}: ${error.message || error}`);
@@ -276,7 +348,7 @@ export class AutoManager {
             // 5. 核心追加：立即应用（注入）翻译到插件
             // 如果这一步失败，我们仍然认为下载是成功的，但返回 false 以便在统计中体现
             const injectSuccess = await this.i18n.injectorManager.applyToPlugin(match.entry.plugin);
-            
+
             return injectSuccess;
         } catch (error) {
             console.error(`Failed to apply translation for ${match.entry.plugin}:`, error);

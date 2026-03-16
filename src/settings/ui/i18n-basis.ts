@@ -99,5 +99,41 @@ export default class I18nBasis extends BaseSetting {
                         window.open('https://github.com/eondrcode/obsidian-manager');
                     });
             });
+
+        // 7. 自动化管理
+        this.containerEl.createEl('h3', { text: t('Settings.Basis.AutoHeader'), cls: 'mt-6 mb-2 text-emerald-600 font-semibold' });
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoMonitorTitle'))
+            .setDesc(t('Settings.Basis.AutoMonitorDesc'))
+            .addToggle(cb => cb
+                .setValue(this.settings.autoMonitor)
+                .onChange(async (value) => {
+                    this.settings.autoMonitor = value;
+                    await this.i18n.saveSettings();
+                })
+            );
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoStartupTitle'))
+            .setDesc(t('Settings.Basis.AutoStartupDesc'))
+            .addToggle(cb => cb
+                .setValue(this.settings.autoCheckOnStartup)
+                .onChange(async (value) => {
+                    this.settings.autoCheckOnStartup = value;
+                    await this.i18n.saveSettings();
+                })
+            );
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoSilentTitle'))
+            .setDesc(t('Settings.Basis.AutoSilentDesc'))
+            .addToggle(cb => cb
+                .setValue(this.settings.autoSilentMode)
+                .onChange(async (value) => {
+                    this.settings.autoSilentMode = value;
+                    await this.i18n.saveSettings();
+                })
+            );
     }
 }

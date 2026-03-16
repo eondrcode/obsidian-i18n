@@ -206,6 +206,7 @@ export default class I18N extends Plugin {
         if (this.settings.checkUpdates) this.coreManager.checkUpdates(false);
 
         if (this.settings.automaticUpdate) await this.injectorManager.run(this.app, false);
+        await this.autoManager.initialize();
         if (this.settings.modeImt) this.coreManager.activateIMT();
     }
 

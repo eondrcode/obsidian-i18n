@@ -1,6 +1,6 @@
 {
     "name": "obsidian-i18n",
-    "version": "2.0.4",
+    "version": "2.0.5",
     "description": "Obsidian国际化翻译插件，提供多语言支持和翻译管理功能",
     "main": "main.js",
     "scripts": {
@@ -11,7 +11,7 @@
         "build": "npm run typecheck && npm run build:css && npm run build:js",
         "build:js": "node esbuild.config.mjs production",
         "build:css": "npx @tailwindcss/cli -i ./src/styles.css -o ./styles.css --minify",
-        "version:bump": "node version-bump.mjs && git add manifest.json versions.json",
+        "version:bump": "node version-bump.mjs",
         "install:deps": "npm install",
         "clean:install": "rm -rf node_modules && npm install"
     },

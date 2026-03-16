@@ -62,6 +62,10 @@ interface CloudState {
     // ===== 差异对比 =====
     diffDialogSourceId: string | null;
     refreshVersion: number;
+
+    // ===== 权限状态 =====
+    isAdmin: boolean;
+    isPushing: boolean;
 }
 
 
@@ -134,6 +138,15 @@ interface CloudActions {
     // 差异对比
     setDiffDialogSourceId: (id: string | null) => void;
 
+    // 权限管理
+    setIsAdmin: (isAdmin: boolean) => void;
+    fetchGithubUser: (i18n: any) => Promise<void>;
+    fetchCommunityRegistry: (i18n: any) => Promise<void>;
+    pushRegistryToCloud: (i18n: any) => Promise<boolean>;
+
+    // 注册表管理 (管理员功能)
+    updateRegistryItem: (repoAddress: string, data: Partial<RegistryItem>) => void;
+
     // 重置
     reset: () => void;
 }
@@ -196,6 +209,8 @@ const initialState: CloudState = {
 
     diffDialogSourceId: null,
     refreshVersion: 0,
+    isAdmin: false,
+    isPushing: false,
 };
 
 
@@ -282,6 +297,121 @@ const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
     // 差异对比
     setDiffDialogSourceId: (diffDialogSourceId) => set({ diffDialogSourceId }),
 
+    // 权限管理
+    setIsAdmin: (isAdmin) => set({ isAdmin }),
+    fetchGithubUser: async (i18n) => {
+        const { githubUser, setGithubUser, setLoading, setIsAdmin, setCanCreateRepo } = get();
+        const token = i18n.settings.shareToken;
+        if (!token || githubUser) return;
+
+        setLoading(true);
+        try {
+            const res = await i18n.api.github.getUser();
+            if (res.state) {
+                const user = {
+                    login: res.data.login,
+                    id: res.data.id,
+                    avatar_url: res.data.avatar_url,
+                    name: res.data.name,
+                    followers: res.data.followers,
+                    following: res.data.following,
+                    public_repos: res.data.public_repos,
+                    created_at: res.data.created_at,
+                    bio: res.data.bio,
+                };
+                setGithubUser(user);
+                setIsAdmin(user.login === i18n.api.github.owner);
+                
+                // 解析权限
+                const scopes: string[] = res.scopes || [];
+                setCanCreateRepo(scopes.includes('public_repo') || scopes.includes('repo'));
+            }
+        } catch (e) {
+            console.error('Failed to fetch github user', e);
+        } finally {
+            setLoading(false);
+        }
+    },
+
+    fetchCommunityRegistry: async (i18n) => {
+        const { communityLoading, setCommunityLoading, setCommunityRegistry, setCommunityStats, setCommunityLoaded } = get();
+        if (communityLoading) return;
+
+        setCommunityLoading(true);
+        try {
+            const owner = i18n.api.github.owner;
+            const repo = i18n.api.github.repo;
+
+            // 并发加载 registry.json 和 stats.json
+            const [registryRes, statsRes] = await Promise.all([
+                i18n.api.github.getFileContentWithFallback(owner, repo, 'registry.json'),
+                i18n.api.github.getFileContentWithFallback(owner, repo, 'stats.json'),
+            ]);
+
+            // 解析 registry.json
+            if (registryRes.state && registryRes.data) {
+                if (Array.isArray(registryRes.data)) {
+                    setCommunityRegistry(registryRes.data);
+                }
+            }
+
+            // 解析 stats.json
+            if (statsRes.state && statsRes.data) {
+                if (statsRes.data && typeof statsRes.data === 'object') {
+                    setCommunityStats(statsRes.data);
+                }
+            }
+
+            if (registryRes.state || statsRes.state) {
+                setCommunityLoaded(true);
+            }
+        } catch (error) {
+            console.error('Failed to fetch community registry', error);
+        } finally {
+            setCommunityLoading(false);
+        }
+    },
+
+    pushRegistryToCloud: async (i18n) => {
+        const { communityRegistry, isPushing } = get();
+        if (isPushing) return false;
+
+        set({ isPushing: true });
+        try {
+            const owner = i18n.api.github.owner;
+            const repo = i18n.api.github.repo;
+            const path = 'registry.json';
+            
+            // 1. 序列化并 Base64 编码
+            const contentJson = JSON.stringify(communityRegistry, null, 2);
+            const contentBase64 = Buffer.from(contentJson, 'utf-8').toString('base64');
+            
+            // 2. 上传文件
+            const res = await i18n.api.github.uploadFile(
+                owner, repo, path, contentBase64, 
+                `Update registry.json from Admin Panel (${new Date().toLocaleString()})`
+            );
+
+            if (res.state) {
+                return true;
+            } else {
+                console.error('Push to Registry failed:', res.data);
+                return false;
+            }
+        } catch (error) {
+            console.error('Push registry error:', error);
+            return false;
+        } finally {
+            set({ isPushing: false });
+        }
+    },
+
+    // 注册表管理
+    updateRegistryItem: (repoAddress, data) => set((state) => ({
+        communityRegistry: state.communityRegistry.map(item => 
+            item.repoAddress === repoAddress ? { ...item, ...data } : item
+        )
+    })),
 
     // 重置 (保留下载页地址簿和当前目标状态)
     reset: () => set((state) => ({

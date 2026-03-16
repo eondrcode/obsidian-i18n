@@ -74,6 +74,11 @@ export interface ManifestEntry {
 export interface RegistryItem {
     repoAddress: string;        // owner/repo 格式
     registeredAt: string;       // 注册时间 ISO 8601
+    isOfficial?: boolean;       // 是否官方仓库
+    isFeatured?: boolean;       // 是否精选/推荐仓库
+    reason?: string;            // 推荐理由
+    badges?: string[];          // 仓库勋章
+    authorBadge?: string;       // 作者/译者称号 (手动指定)
 }
 
 // ========== 社区仓库统计数据（stats.json 中的单条记录） ==========
@@ -116,6 +121,7 @@ export interface CommunityRepoStats {
     // ===== Metadata 摘要（从 metadata.json 统计） =====
     translationCount: number;       // 翻译覆盖的文件数量
     pluginCount: number;            // 该仓库涵盖的独立插件种数
+    themeCount?: number;            // 该仓库涵盖的独立主题种数
     languages: string[];            // 支持的语言列表
     pluginIds: string[];            // 翻译覆盖的插件 ID 列表
     lastManifestUpdate: string;     // metadata.json 最后更新时间 (ISO 8601)
