@@ -208,6 +208,9 @@ export default class I18N extends Plugin {
         if (this.settings.automaticUpdate) await this.injectorManager.run(this.app, false);
         await this.autoManager.initialize();
         if (this.settings.modeImt) this.coreManager.activateIMT();
+
+        // [清理] 检查并清理已卸载插件的冗余备份与状态
+        await this.stateManager.cleanupRemovedResources(this.app);
     }
 
     public async onAgreementAccepted() {

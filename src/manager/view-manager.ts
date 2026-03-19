@@ -46,17 +46,30 @@ export class ObsidianView {
     // 激活视图
     public async activate(): Promise<void> {
         const { workspace } = this.i18n.app;
+
+        // 确保工作区布局已加载完成
+        await new Promise(resolve => workspace.onLayoutReady(() => resolve(null)));
+
         this.deactivate();
         let workspaceLeaf: WorkspaceLeaf | null = null;
         const leaves = workspace.getLeavesOfType(this.viewType);
         if (leaves.length > 0) {
             workspaceLeaf = leaves[0];
         } else {
-            workspaceLeaf = workspace.getLeaf(this.leafType);
+            try {
+                // @ts-ignore
+                workspaceLeaf = workspace.getLeaf(this.leafType);
+            } catch (e) {
+                // 如果指定的 leafType (比如 true, 'tab') 失败（如无可用标签页组），尝试回退到新窗口
+                console.warn(`[i18n] Failed to get leaf of type ${this.leafType}, falling back to 'window':`, e);
+                workspaceLeaf = workspace.getLeaf('window');
+            }
+
             if (workspaceLeaf) {
                 await workspaceLeaf.setViewState({ type: this.viewType, active: true });
                 // 如果是新窗口模式且有尺寸配置，尝试调整窗口大小
-                if (this.leafType === 'window' && this.viewOption) {
+                // @ts-ignore
+                if ((this.leafType === 'window' || workspaceLeaf.containerEl.ownerDocument !== document) && this.viewOption) {
                     const win = (workspaceLeaf.view.containerEl.ownerDocument as Document).defaultView;
                     if (win) {
                         const width = this.viewOption.width || win.outerWidth;

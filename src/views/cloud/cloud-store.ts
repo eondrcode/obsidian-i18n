@@ -337,7 +337,7 @@ const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
                 };
                 setGithubUser(user);
                 setIsAdmin(user.login === i18n.api.github.owner);
-                
+
                 // 解析权限
                 const scopes: string[] = res.scopes || [];
                 setCanCreateRepo(scopes.includes('public_repo') || scopes.includes('repo'));
@@ -397,14 +397,14 @@ const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
             const owner = i18n.api.github.owner;
             const repo = i18n.api.github.repo;
             const path = 'registry.json';
-            
+
             // 1. 序列化并 Base64 编码
             const contentJson = JSON.stringify(communityRegistry, null, 2);
             const contentBase64 = Buffer.from(contentJson, 'utf-8').toString('base64');
-            
+
             // 2. 上传文件
             const res = await i18n.api.github.uploadFile(
-                owner, repo, path, contentBase64, 
+                owner, repo, path, contentBase64,
                 `Update registry.json from Admin Panel (${new Date().toLocaleString()})`
             );
 
@@ -424,7 +424,7 @@ const useCloudStoreBase = create<CloudState & CloudActions>()((set, get) => ({
 
     // 注册表管理
     updateRegistryItem: (repoAddress, data) => set((state) => ({
-        communityRegistry: state.communityRegistry.map(item => 
+        communityRegistry: state.communityRegistry.map(item =>
             item.repoAddress === repoAddress ? { ...item, ...data } : item
         )
     })),

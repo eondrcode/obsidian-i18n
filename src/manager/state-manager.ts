@@ -173,4 +173,71 @@ export class StateManager {
             this.save();
         }
     }
+
+    /**
+     * 清理已卸载插件/主题的冗余数据
+     */
+    public async cleanupRemovedResources(app: App) {
+        // @ts-ignore
+        const manifests = app.plugins.manifests;
+        let hasChanges = false;
+
+        // 1. 处理插件
+        const pluginIds = Object.keys(this.data.plugins);
+        for (const id of pluginIds) {
+            if (!manifests[id]) {
+                // 插件已卸载
+                const state = this.data.plugins[id];
+                
+                // 如果是已应用状态，先尝试还原 (还原操作内部会处理备份文件的删除)
+                if (state.isApplied && this.plugin.backupManager.hasBackup(id)) {
+                    // @ts-ignore
+                    const basePath = app.vault.adapter.getBasePath ? path.normalize(app.vault.adapter.getBasePath()) : '';
+                    const pluginDir = path.join(basePath, app.vault.configDir, 'plugins', id);
+                    
+                    try {
+                        await this.plugin.backupManager.restoreBackup(id, pluginDir);
+                        console.log(`[i18n] Restored and cleaned up backup for uninstalled plugin: ${id}`);
+                    } catch (e) {
+                        console.error(`[i18n] Failed to restore backup for uninstalled plugin ${id}:`, e);
+                        // 如果还原失败，仍然尝试直接删除备份
+                        await this.plugin.backupManager.removeBackup(id);
+                    }
+                } else {
+                    // 如果没应用或没备份，直接删除可能残留的备份文件
+                    await this.plugin.backupManager.removeBackup(id);
+                }
+
+                delete this.data.plugins[id];
+                hasChanges = true;
+                console.log(`[i18n] Cleaned up state for uninstalled plugin: ${id}`);
+            }
+        }
+
+        // 2. 处理主题
+        const themeIds = Object.keys(this.data.themes);
+        for (const id of themeIds) {
+            // @ts-ignore
+            const basePath = app.vault.adapter.getBasePath ? path.normalize(app.vault.adapter.getBasePath()) : '';
+            if (!basePath) continue;
+
+            const themeDir = path.join(basePath, app.vault.configDir, 'themes', id);
+            if (!fs.existsSync(themeDir)) {
+                // 主题文件夹已不存在
+                const state = this.data.themes[id];
+
+                // 主题暂不支持 restoreBackup 这种多文件还原逻辑（BackupManager 目前的主题逻辑较简单）
+                // 但为了统一，如果未来支持了可以加在这里。目前直接删除备份。
+                await this.plugin.backupManager.removeBackup(id);
+
+                delete this.data.themes[id];
+                hasChanges = true;
+                console.log(`[i18n] Cleaned up state and backup for deleted theme: ${id}`);
+            }
+        }
+
+        if (hasChanges) {
+            this.save();
+        }
+    }
 }

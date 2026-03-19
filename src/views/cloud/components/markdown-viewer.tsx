@@ -49,6 +49,11 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content, owner: 
                 const rawMatch = url.match(/raw\.githubusercontent\.com\/([^\/]+)\/([^\/]+)\/([^\/]+)\/(.+)/);
                 if (rawMatch) {
                     const [_, o, r, b, p] = rawMatch;
+                    const proxy = i18n.settings.githubProxyUrl;
+                    if (proxy) {
+                        const prefix = proxy.endsWith('/') ? proxy : proxy + '/';
+                        return `${prefix}https://raw.githubusercontent.com/${o}/${r}/${b}/${p}`;
+                    }
                     return `https://cdn.jsdelivr.net/gh/${o}/${r}@${b}/${p}`;
                 }
             }
@@ -58,6 +63,11 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content, owner: 
         const cleanPath = url.replace(/^\.?\//, '');
         const encodedPath = cleanPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
         if (isImage) {
+            const proxy = i18n.settings.githubProxyUrl;
+            if (proxy) {
+                const prefix = proxy.endsWith('/') ? proxy : proxy + '/';
+                return `${prefix}https://raw.githubusercontent.com/${owner}/${repo}/${currentBranch}/${encodedPath}`;
+            }
             return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${currentBranch}/${encodedPath}`;
         } else {
             return `https://github.com/${owner}/${repo}/blob/${currentBranch}/${encodedPath}`;

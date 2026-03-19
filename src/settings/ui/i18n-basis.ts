@@ -1,5 +1,5 @@
 import BaseSetting from "../base-setting";
-import { Setting } from "obsidian";
+import { Setting, Notice, requestUrl } from "obsidian";
 import { SUPPORTED_LANGUAGES } from '@/src/constants/languages';
 import { t } from "src/locales";
 
@@ -140,6 +140,74 @@ export default class I18nBasis extends BaseSetting {
                         window.open('https://github.com/eondrcode/obsidian-manager');
                     });
             });
+
+        // 5. 网络配置
+        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderNetwork'), cls: headerClass });
+
+        const proxyOptions = {
+            '': t('Settings.Basis.ProxyDirect'),
+            'https://ghproxy.net/': t('Settings.Basis.ProxyNode2'),
+            'https://gh-proxy.com/': t('Settings.Basis.ProxyNode5'),
+            'https://cdn.jsdelivr.net/gh/': t('Settings.Basis.ProxyNode7'),
+            'https://fastly.jsdelivr.net/gh/': t('Settings.Basis.ProxyNode8'),
+            'https://gcore.jsdelivr.net/gh/': t('Settings.Basis.ProxyNode9'),
+            'https://cdn.statically.io/gh/': t('Settings.Basis.ProxyNode10')
+        };
+
+        // 当 settings 保存的值不在现有选项中（例如原来填了 custom 的网址），退回直连
+        let currentValue = this.settings.githubProxyUrl;
+        if (!Object.keys(proxyOptions).includes(currentValue)) {
+            currentValue = '';
+        }
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.GithubProxyTitle'))
+            .setDesc(t('Settings.Basis.GithubProxyDesc'))
+            .addDropdown(cb => cb
+                .addOptions(proxyOptions)
+                .setValue(currentValue)
+                .onChange(async (value) => {
+                    this.settings.githubProxyUrl = value;
+                    await this.i18n.saveSettings();
+                })
+            )
+            .addButton(cb => cb
+                .setButtonText(t('Settings.Basis.ProxyTestBtn'))
+                .setTooltip(t('Settings.Basis.ProxyTestTooltip'))
+                .onClick(async () => {
+                    cb.setButtonText(t('Settings.Basis.ProxyTesting'));
+                    cb.buttonEl.disabled = true;
+
+                    const targetUrl = 'https://raw.githubusercontent.com/eondrcode/obsidian-i18n/master/manifest.json';
+                    const testUrl = this.i18n.api.github.wrapProxyUrl(targetUrl);
+
+                    try {
+                        const start = Date.now();
+                        const res = await Promise.race([
+                            requestUrl({ url: testUrl + '?t=' + start, method: 'GET' }),
+                            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+                        ]);
+                        const ms = Date.now() - start;
+                        if (res.status === 200) {
+                            new Notice(t('Settings.Basis.ProxyTestSuccess', { ms }));
+                            cb.setButtonText(`${ms}ms`);
+                            cb.buttonEl.style.color = 'var(--text-success)';
+                        } else {
+                            throw new Error('status ' + res.status);
+                        }
+                    } catch (e) {
+                        new Notice(t('Settings.Basis.ProxyTestErrorNotice'));
+                        cb.setButtonText(t('Settings.Basis.ProxyTestFail'));
+                        cb.buttonEl.style.color = 'var(--text-error)';
+                    }
+
+                    setTimeout(() => {
+                        cb.setButtonText(t('Settings.Basis.ProxyTestBtn'));
+                        cb.buttonEl.disabled = false;
+                        cb.buttonEl.style.color = '';
+                    }, 3500);
+                })
+            );
 
     }
 }

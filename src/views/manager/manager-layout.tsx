@@ -7,8 +7,9 @@ import { useCloudStore } from '../cloud/cloud-store';
 import { PluginManager } from './plugin-manager';
 import { ThemeManager } from './theme-manager';
 import { AutoManagerPanel } from './components/auto-manager-panel';
+import { TranslationManagerPanel } from './components/translation-manager-panel';
 import { CreditsPanel } from './components/credits-panel';
-import { LayoutGrid, Palette, Settings, Cloud, CircleHelp, Loader2, Coffee, ShieldAlert, MonitorPlay, Heart } from 'lucide-react';
+import { LayoutGrid, Palette, Settings, Cloud, CircleHelp, Loader2, Coffee, ShieldAlert, MonitorPlay, Heart, FileJson } from 'lucide-react';
 import Url from 'src/constants/url';
 import { WIZARD_VIEW_TYPE } from '../../views';
 import { CLOUD_VIEW_TYPE } from '../cloud';
@@ -50,6 +51,10 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
                         <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3 rounded-none" value="themes">
                             <Palette className="w-3.5 h-3.5" />
                             {t('Manager.Labels.Themes')}
+                        </TabsTrigger>
+                        <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3 rounded-none" value="sources">
+                            <FileJson className="w-3.5 h-3.5" />
+                            {t('Manager.Tabs.Sources')}
                         </TabsTrigger>
                         <TabsTrigger className="h-7 text-xs data-[state=active]:shadow-sm gap-1.5 px-3 rounded-none" value="auto">
                             <MonitorPlay className="w-3.5 h-3.5" />
@@ -131,6 +136,10 @@ export const ManagerLayout: React.FC<ManagerLayoutProps> = ({ i18n, close }) => 
 
                 <TabsContent value="themes" className="flex-1 min-h-0 m-0 focus-visible:ring-0">
                     <ThemeManager i18n={i18n} />
+                </TabsContent>
+
+                <TabsContent value="sources" className="flex-1 min-h-0 m-0 focus-visible:ring-0 overflow-hidden flex flex-col">
+                    <TranslationManagerPanel i18n={i18n} />
                 </TabsContent>
 
                 <TabsContent value="auto" className="flex-1 min-h-0 m-0 focus-visible:ring-0 overflow-y-auto w-full">

@@ -22,6 +22,8 @@ translations
 backups
 cache
 
+更新日志.md
+
 # 排除macOS Finder （System Explorer）视图状态
 .DS_Store
 

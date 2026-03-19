@@ -70,7 +70,7 @@ const CloudViewContent: React.FC = () => {
                 // 1. 获取/刷新用户信息 (使用 Store 统一动作)
                 await fetchGithubUser(i18n);
                 if (cancelled) return;
-                
+
                 const user = useCloudStore.getState().githubUser;
                 if (!user) return;
 

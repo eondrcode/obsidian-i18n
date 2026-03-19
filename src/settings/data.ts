@@ -88,6 +88,11 @@ export interface I18nSettings {
     astValidRe: string[];    // 有效正则 (字符串形式)
 
     // ==============================
+    // 网络配置
+    // ==============================
+    githubProxyUrl: string;
+
+    // ==============================
     // 资源仓库列表
     // ==============================
     cloudRepos: string[];     // 云端默认加载的插件资源列表仓库
@@ -217,6 +222,11 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     astValidRe: [
         "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
     ],
+
+    // ==============================
+    // 网络配置
+    // ==============================
+    githubProxyUrl: 'https://ghp.ci/',
 
     cloudRepos: [],
 

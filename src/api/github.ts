@@ -11,7 +11,8 @@
 
 import I18N from "main";
 import { I18nSettings } from "src/settings/data";
-import { RequestUrlParam, requestUrl, RequestUrlResponse } from "obsidian";
+import { RequestUrlParam, requestUrl, RequestUrlResponse, Notice } from "obsidian";
+import { t } from "src/locales";
 
 /**
  * 包装并扩展 requestUrl 功能：加入了本地的 Promise.race 强硬超时设计。
@@ -22,7 +23,11 @@ async function requestWithTimeout(params: RequestUrlParam, timeoutMs: number = 1
     return Promise.race([
         requestUrl(params),
         new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`请求超时 (>${timeoutMs}ms)`)), timeoutMs)
+            setTimeout(() => {
+                const message = t('Settings.Basis.GithubApiTimeoutHint') || `请求超时 (>${timeoutMs}ms)`;
+                // new Notice(message, 10000); // 弹框提醒，且显示时间长一点
+                reject(new Error(message));
+            }, timeoutMs)
         )
     ]);
 }
@@ -48,6 +53,36 @@ export class GitHubAPI {
 
     // ========== 通用辅助 ==========
 
+    /**
+     * 判断是否应用公益加速代理
+     * 仅对 raw.githubusercontent.com 生效，严禁用于 api.github.com 等带有 privacy/token 隐私风险的网址。
+     */
+    public wrapProxyUrl(url: string): string {
+        const proxy = this.settings.githubProxyUrl;
+        if (!proxy) return url;
+
+        // 限制代理只能用于公开安全的域名
+        if (url.includes('raw.githubusercontent.com')) {
+            // 防重复
+            if (url.startsWith(proxy)) return url;
+
+            // 特殊处理 jsDelivr: https://cdn.jsdelivr.net/gh/owner/repo@branch/path
+            if (proxy.includes('jsdelivr.net')) {
+                return url.replace('https://raw.githubusercontent.com/', proxy)
+                    .replace(/gh\/([^/]+)\/([^/]+)\/([^/]+)\//, 'gh/$1/$2@$3/');
+            }
+
+            // 特殊处理 Statically: https://cdn.statically.io/gh/owner/repo/tag/file
+            if (proxy.includes('statically.io')) {
+                return url.replace('https://raw.githubusercontent.com/', proxy);
+            }
+
+            const prefix = proxy.endsWith('/') ? proxy : proxy + '/';
+            return prefix + url;
+        }
+        return url; // 其他域名不走代理
+    }
+
     private get token(): string {
         return this.settings.shareToken;
     }
@@ -64,6 +99,13 @@ export class GitHubAPI {
 
     private wrapError(error: any): { state: false; data: any; isRateLimit: boolean } {
         const isRateLimit = !!(error?.status === 403 && (error?.text?.includes('rate limit') || error?.json?.message?.includes('rate limit')));
+
+        // 增强提示：如果是网络连接失败或类似 fetch 报错
+        const errMsg = error?.message || String(error);
+        if (errMsg.includes('fetch failed') || errMsg.includes('Network Error') || errMsg.includes('net::ERR')) {
+            new Notice(t('Settings.Basis.GithubApiTimeoutHint'), 10000);
+        }
+
         return { state: false, data: error, isRateLimit };
     }
 
@@ -71,7 +113,7 @@ export class GitHubAPI {
 
     /** 获取当前 Token 对应的 GitHub 用户信息 */
     public async getUser(): Promise<
-        { state: true; data: any; scopes: string[] } | 
+        { state: true; data: any; scopes: string[] } |
         { state: false; data: any; isRateLimit?: boolean }
     > {
         try {
@@ -84,7 +126,7 @@ export class GitHubAPI {
             // 从响应头解析权限范围
             const scopesStr = response.headers['x-oauth-scopes'] || '';
             const scopes = scopesStr.split(',').map((s: string) => s.trim()).filter(Boolean);
-            
+
             return {
                 state: true,
                 data: response.json,
@@ -273,10 +315,10 @@ export class GitHubAPI {
             if (rawRes.state && rawRes.data) {
                 return { state: true, data: rawRes.data };
             }
-            
+
             // 如果 Raw 也失败了，且之前有 API 失败记录，检查是否是频率限制
             if (rawRes.data?.status === 403 || rawRes.data?.status === 429) {
-                 return { state: false, data: rawRes.data, isRateLimit: true };
+                return { state: false, data: rawRes.data, isRateLimit: true };
             }
         } catch (e) {
             // raw 节点也失败
@@ -305,7 +347,7 @@ export class GitHubAPI {
     ): Promise<{ state: boolean; data: any }> {
         try {
             if (!this.token) {
-                return { state: false, data: '请先在设置中配置 GitHub Token' };
+                return { state: false, data: t('Settings.Basis.GithubApiTokenMissing') };
             }
 
             // 检查文件是否已存在（获取 sha 用于更新）
@@ -378,7 +420,7 @@ export class GitHubAPI {
     ): Promise<{ state: boolean; data: any }> {
         try {
             if (!this.token) {
-                return { state: false, data: '请先在设置中配置 GitHub Token' };
+                return { state: false, data: t('Settings.Basis.GithubApiTokenMissing') };
             }
 
             // 1. 获取文件的 SHA 以便能够删除它
@@ -394,10 +436,10 @@ export class GitHubAPI {
                 if (checkRes.status === 200) {
                     sha = checkRes.json.sha;
                 } else {
-                    return { state: false, data: '文件不存在' };
+                    return { state: false, data: t('Settings.Basis.GithubApiFileNotFound') };
                 }
             } catch (e) {
-                return { state: false, data: '检查文件失败' };
+                return { state: false, data: t('Settings.Basis.GithubApiCheckFailed') };
             }
 
             // 2. 发起 DELETE 请求
@@ -435,8 +477,9 @@ export class GitHubAPI {
     /** 从主仓库获取翻译文件 */
     public async getTranslation(type: string, id: string, version: string) {
         try {
+            const baseUrl = `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/dict/${id}/zh-cn/${version}.json`;
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/dict/${id}/zh-cn/${version}.json`,
+                url: this.wrapProxyUrl(baseUrl),
                 method: 'GET',
             };
             const response = await requestWithTimeout(params);
@@ -449,8 +492,9 @@ export class GitHubAPI {
     /** 获取翻译目录 */
     public async getDirectory(type: string) {
         try {
+            const baseUrl = `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/directory/zh-cn.json`;
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${this.owner}/${this.repo}/master/translation/directory/zh-cn.json`,
+                url: this.wrapProxyUrl(baseUrl),
                 method: 'GET',
             };
             const response = await requestWithTimeout(params);
@@ -467,8 +511,9 @@ export class GitHubAPI {
         try {
             // 注意：raw.githubusercontent.com 有 5 分钟 CDN 缓存
             // 我们通过添加随机参数尝试强制刷新，但在某些情况下仍可能受限
+            const baseUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`;
             const params: RequestUrlParam = {
-                url: `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}?t=${Date.now()}`,
+                url: this.wrapProxyUrl(baseUrl),
                 method: 'GET',
             };
             const response = await requestWithTimeout(params);
@@ -521,7 +566,7 @@ export class GitHubAPI {
     public async postIssue(title: string, body: string, label?: string, targetOwner?: string, targetRepo?: string) {
         try {
             if (!this.token) {
-                return { state: false, data: '请先在设置中配置 GitHub Token' };
+                return { state: false, data: t('Settings.Basis.GithubApiTokenMissing') };
             }
             const issueOwner = targetOwner || this.owner;
             const issueRepo = targetRepo || this.repo;
@@ -651,14 +696,6 @@ export class GitHubAPI {
     /**
      * 创建一个新的 Tree 对象
      * @param treeData 
-     * [
-     *   {
-     *     "path": "file.rb",
-     *     "mode": "100644",
-     *     "type": "blob",
-     *     "content": "..."
-     *   }
-     * ]
      */
     public async createTree(owner: string, repo: string, baseTree: string, treeData: any[]): Promise<{ state: boolean; data: any }> {
         try {
@@ -742,7 +779,7 @@ export class GitHubAPI {
         branch: string = 'main'
     ): Promise<{ state: boolean; data: any }> {
         try {
-            if (!this.token) return { state: false, data: '请先在设置中配置 GitHub Token' };
+            if (!this.token) return { state: false, data: t('Settings.Basis.GithubApiTokenMissing') };
             if (files.length === 0) return { state: true, data: 'no files to upload' };
 
             // 1. 获取最新 Commit

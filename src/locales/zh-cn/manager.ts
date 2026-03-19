@@ -114,7 +114,38 @@ export default {
     Tabs: {
         AutoManagerTitle: "自动化",
         AutoManagerDesc: "查看一键翻译的后台执行状态与详情。",
+        Sources: "管理",
         Credits: "鸣谢"
+    },
+    TranslationManager: {
+        Title: "本地译文仓库",
+        Subtitle: "搜索、导入、导出以及批量管理您所有的本地翻译数据。",
+        Table: {
+            Name: "翻译名称/插件",
+            Id: "源 ID",
+            Origin: "来源",
+            Mtime: "更新时间",
+            Type: "类型",
+            Actions: "操作"
+        },
+        Actions: {
+            Export: "批量导出",
+            Import: "导入译文",
+            BatchDelete: "批量删除",
+            DeleteConfirm: "确定要删除选中的 {{count}} 项译文吗？此操作不可撤销。",
+            ImportSuccess: "成功导入 {{count}} 项译文",
+            ExportSuccess: "译文导出成功",
+            SelectAll: "全选"
+        },
+        Filters: {
+            SearchPlaceholder: "搜索翻译或插件 ID...",
+            OriginLocal: "本地提取",
+            OriginCloud: "云端下载"
+        },
+        Stats: {
+            Total: "总译文数",
+            Selected: "已选中"
+        }
     },
     Credits: {
         Title: "致谢所有贡献者",
