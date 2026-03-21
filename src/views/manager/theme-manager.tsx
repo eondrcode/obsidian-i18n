@@ -68,6 +68,30 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
 
     const [statusFilter, setStatusFilter] = useState<'all' | 'applied' | 'unapplied' | 'translated' | 'untranslated' | 'toExtract'>('all');
 
+    const [cloudManifest, setCloudManifest] = useState<any[]>([]);
+
+    useEffect(() => {
+        const repo = i18n.settings.defaultCloudRepo;
+        if (!repo) {
+            setCloudManifest([]);
+            return;
+        }
+        const parts = repo.split('/');
+        if (parts.length !== 2) return;
+        const [owner, repoName] = parts;
+
+        let isMounted = true;
+        i18n.api.github.getFileContentWithFallback(owner, repoName, 'metadata.json')
+            .then(res => {
+                if (isMounted && res.state && Array.isArray(res.data)) {
+                    setCloudManifest(res.data);
+                }
+            })
+            .catch(e => console.error("Failed to fetch default cloud repo:", e));
+
+        return () => { isMounted = false; };
+    }, [i18n.settings.defaultCloudRepo, i18n]);
+
     // 监听全局源变?
     const sourceTick = useGlobalStoreInstance((state) => state.sourceUpdateTick);
 
@@ -202,11 +226,12 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
                 isTranslated,
                 translationVersion,
                 description,
-                supportedVersion
+                supportedVersion,
+                cloudEntries: cloudManifest.filter(entry => entry.plugin === theme.name && entry.type === 'theme')
             };
         }
         return stats;
-    }, [themes, i18n, refreshKey, sourceTick, t, checkIsTranslated]);
+    }, [themes, i18n, refreshKey, sourceTick, t, checkIsTranslated, cloudManifest]);
 
     const displayThemes = useMemo(() => {
         let result = [...themes];

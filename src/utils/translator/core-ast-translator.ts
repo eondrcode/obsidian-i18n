@@ -356,7 +356,7 @@ export class AstTranslator {
      */
     public findString(targetText: string, ast: t.Node): { line: number, column: number, type: string, name: string, source: string }[] {
         const matches: { line: number, column: number, type: string, name: string, source: string }[] = [];
-        
+
         this.traverseAllStrings(ast, (type, name, valueNode) => {
             const source = this.extractSource(valueNode);
             if (source && source.includes(targetText)) {
@@ -370,7 +370,7 @@ export class AstTranslator {
                 });
             }
         });
-        
+
         return matches;
     }
 

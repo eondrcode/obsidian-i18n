@@ -141,7 +141,22 @@ export default class I18nBasis extends BaseSetting {
                     });
             });
 
-        // 5. 网络配置
+        // 5. 云端中心
+        this.containerEl.createEl('h3', { text: t('Settings.Basis.CloudRepoHeader' as any) || '云端中心', cls: headerClass });
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.DefaultCloudRepoTitle' as any) || '默认云端仓库')
+            .setDesc(t('Settings.Basis.DefaultCloudRepoDesc' as any) || '在此配置默认的云端翻译库，设置后将在管理器的项目下拉框中展示该库的可用翻译版本以供一键下载。')
+            .addText(cb => cb
+                .setPlaceholder(t('Settings.Basis.DefaultCloudRepoPlaceholder' as any) || '例如：eondrcode/obsidian-i18n-resources')
+                .setValue(this.settings.defaultCloudRepo)
+                .onChange(async (value) => {
+                    this.settings.defaultCloudRepo = value;
+                    await this.i18n.saveSettings();
+                })
+            );
+
+        // 6. 网络配置
         this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderNetwork'), cls: headerClass });
 
         const proxyOptions = {

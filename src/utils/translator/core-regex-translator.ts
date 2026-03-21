@@ -159,7 +159,7 @@ export class RegexTranslator {
     public findString(targetText: string, code: string): { line: number, source: string }[] {
         const matches: { line: number, source: string }[] = [];
         const lines = code.split('\n');
-        
+
         lines.forEach((line, index) => {
             if (line.includes(targetText)) {
                 matches.push({
@@ -168,7 +168,7 @@ export class RegexTranslator {
                 });
             }
         });
-        
+
         return matches;
     }
 

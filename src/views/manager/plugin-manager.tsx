@@ -52,6 +52,30 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
     const [refreshKey, setRefreshKey] = useState(0);
     const [isReloading, setIsReloading] = useState(false);
 
+    const [cloudManifest, setCloudManifest] = useState<any[]>([]);
+
+    useEffect(() => {
+        const repo = settings.defaultCloudRepo;
+        if (!repo) {
+            setCloudManifest([]);
+            return;
+        }
+        const parts = repo.split('/');
+        if (parts.length !== 2) return;
+        const [owner, repoName] = parts;
+
+        let isMounted = true;
+        i18n.api.github.getFileContentWithFallback(owner, repoName, 'metadata.json')
+            .then(res => {
+                if (isMounted && res.state && Array.isArray(res.data)) {
+                    setCloudManifest(res.data);
+                }
+            })
+            .catch(e => console.error("Failed to fetch default cloud repo:", e));
+
+        return () => { isMounted = false; };
+    }, [settings.defaultCloudRepo, i18n]);
+
     // 监听全局源变?
     const sourceTick = useGlobalStoreInstance((state) => state.sourceUpdateTick);
 
@@ -158,11 +182,12 @@ export const PluginManager: React.FC<PluginManagerProps> = ({ i18n, close }) => 
                 isApplied: !!(state && state.isApplied),
                 isTranslated,
                 translationVersion,
-                supportedVersion
+                supportedVersion,
+                cloudEntries: cloudManifest.filter(entry => entry.plugin === plugin.id && entry.type === 'plugin')
             };
         }
         return stats;
-    }, [plugins, i18n, refreshKey, sourceTick, t, checkIsTranslated]);
+    }, [plugins, i18n, refreshKey, sourceTick, t, checkIsTranslated, cloudManifest]);
 
     const displayPlugins = useMemo(() => {
         let result = [...plugins];

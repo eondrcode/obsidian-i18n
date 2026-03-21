@@ -211,7 +211,7 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
     };
 
     return (
-        <div className="flex flex-col h-full bg-background">
+        <div className="flex flex-col flex-1 min-h-0 bg-background">
             {/* 顶栏控制区 */}
             <div className="shrink-0 p-4 border-b space-y-4 shadow-sm bg-muted/20">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -297,7 +297,7 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
             </div>
 
             {/* 内容列表区 */}
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 min-h-0">
                 <Table>
                     <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
                         <TableRow className="hover:bg-transparent">

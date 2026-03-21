@@ -96,6 +96,7 @@ export interface I18nSettings {
     // 资源仓库列表
     // ==============================
     cloudRepos: string[];     // 云端默认加载的插件资源列表仓库
+    defaultCloudRepo: string; // 用户指定的默认云仓库地址
 
     // ==============================
     // 管理器状态持久化
@@ -229,6 +230,7 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     githubProxyUrl: 'https://ghp.ci/',
 
     cloudRepos: [],
+    defaultCloudRepo: 'eondrcode/obsidian-i18n-resources',
 
     // ==============================
     // 管理器状态持久化

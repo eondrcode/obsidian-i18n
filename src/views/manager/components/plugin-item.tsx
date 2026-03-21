@@ -3,7 +3,7 @@ import { PluginManifest, Notice } from 'obsidian';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { useTranslation } from 'react-i18next';
-import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal } from 'lucide-react';
+import { Settings, FolderOpen, Pen, FileOutput, XCircle, Loader2, MoreHorizontal, CloudDownload, Cloud } from 'lucide-react';
 import I18N from 'src/main';
 import { PluginTranslationV1 } from 'src/types';
 import { i18nOpen, AstTranslator, RegexTranslator, isValidPluginTranslationV1Format } from '../../../utils';
@@ -53,6 +53,7 @@ export interface PluginItemData {
     isTranslated: boolean;
     translationVersion?: string;
     supportedVersion?: string;
+    cloudEntries?: any[];
 }
 
 interface PluginItemProps {
@@ -77,10 +78,69 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
     const {
         statusColor, statusText, statusDesc, isLangDoc, langDoc, pluginDir,
         sources, activeSourceId, translationFormatMark, mainDoc, manifestDoc, isApplied,
-        isTranslated, translationVersion, supportedVersion
+        isTranslated, translationVersion, supportedVersion, cloudEntries
     } = data;
 
     const sourceManager = i18n.sourceManager;
+    const [downloadingCloudId, setDownloadingCloudId] = useState<string | null>(null);
+
+    const handleCloudDownload = async (entry: any) => {
+        if (downloadingCloudId) return;
+        setDownloadingCloudId(entry.id);
+        try {
+            const repo = settings.defaultCloudRepo;
+            if (!repo) {
+                i18n.notice.error(t('Cloud.Errors.FetchFail' as any) || 'No default cloud repo set');
+                return;
+            }
+            const parts = repo.split('/');
+            if (parts.length !== 2) return;
+            const [owner, repoName] = parts;
+
+            const fileRes = await i18n.api.github.getFileContentWithFallback(owner, repoName, `plugins/${entry.id}.json`);
+            if (!fileRes.state || !fileRes.data) {
+                throw new Error(fileRes.isRateLimit ? 'Rate limit exceeded' : fileRes.data?.message || 'Download failed');
+            }
+            
+            const content = typeof fileRes.data === 'string' ? JSON.parse(fileRes.data) : fileRes.data;
+            const { calculateChecksum } = await import('../../../utils');
+            
+            const existingSource = sourceManager?.getAllSources().find(s => s.id === entry.id);
+            if (existingSource) {
+                sourceManager?.saveSourceFile(existingSource.id, content);
+                sourceManager?.saveSource({
+                    ...existingSource,
+                    origin: 'cloud',
+                    title: entry.title || existingSource.title,
+                    checksum: calculateChecksum(content),
+                    cloud: { owner, repo: repoName, hash: entry.hash },
+                    updatedAt: Date.now()
+                });
+                i18n.notice.successPrefix('Cloud' , t('Cloud.Notices.UpdateSuccess' as any) || 'Update success');
+            } else {
+                sourceManager?.saveSourceFile(entry.id, content);
+                const isOnly = !sourceManager?.getActiveSourceId(plugin.id);
+                sourceManager?.saveSource({
+                    id: entry.id,
+                    plugin: entry.plugin,
+                    title: entry.title || 'Unknown',
+                    type: entry.type,
+                    origin: 'cloud',
+                    isActive: isOnly,
+                    checksum: calculateChecksum(content),
+                    cloud: { owner, repo: repoName, hash: entry.hash },
+                    updatedAt: Date.now(),
+                    createdAt: Date.now()
+                });
+                i18n.notice.successPrefix('Cloud', t('Cloud.Notices.DownloadSuccess' as any) || 'Download success');
+            }
+            refreshParent();
+        } catch (e) {
+            i18n.notice.error(`Failed to download: ${e}`);
+        } finally {
+            setDownloadingCloudId(null);
+        }
+    };
 
     const handleExtract = async () => {
         setExtracting(true);
@@ -278,6 +338,36 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                                         </Tooltip>
                                     </TooltipProvider>
                                 )}
+                                
+                                {cloudEntries && cloudEntries.length > 0 && (
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-none hover:bg-muted/50 transition-all">
+                                                {downloadingCloudId ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <CloudDownload className="w-4 h-4 text-primary/80" />}
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-56 shadow-2xl backdrop-blur-md bg-background/95 border-border/40">
+                                            {cloudEntries.map(entry => {
+                                                const isDownloaded = sources.some(s => s.id === entry.id);
+                                                const isOutdated = sources.some(s => s.id === entry.id && s.cloud?.hash !== entry.hash);
+                                                return (
+                                                    <DropdownMenuItem key={entry.id} onClick={() => handleCloudDownload(entry)} className="text-[11px] py-1.5 flex items-center justify-between">
+                                                        <div className="flex items-center truncate">
+                                                            <Cloud className="w-3.5 h-3.5 mr-2 text-primary/60" />
+                                                            <span className="truncate" title={entry.title}>{entry.title} <span className="text-muted-foreground/60">v{entry.version}</span></span>
+                                                        </div>
+                                                        {(isDownloaded && !isOutdated) ? (
+                                                            <Badge variant="outline" className="text-[8px] h-4 px-1 ml-2 bg-green-500/10 text-green-600 border-none shrink-0">已下载</Badge>
+                                                        ) : isOutdated ? (
+                                                            <Badge variant="outline" className="text-[8px] h-4 px-1 ml-2 bg-amber-500/10 text-amber-600 border-none shrink-0 animate-pulse">有更新</Badge>
+                                                        ) : null}
+                                                    </DropdownMenuItem>
+                                                );
+                                            })}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                )}
+
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" size="icon" className="h-7 w-7 rounded-none hover:bg-muted/50 transition-all">
@@ -426,6 +516,35 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                             </TooltipProvider>
                         )}
 
+                        {cloudEntries && cloudEntries.length > 0 && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none hover:bg-primary/10 hover:text-primary transition-all">
+                                        {downloadingCloudId ? <Loader2 className="w-4 h-4 animate-spin" /> : <CloudDownload className="w-4 h-4" />}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56 shadow-2xl backdrop-blur-md bg-background/95 border-border/40">
+                                    {cloudEntries.map(entry => {
+                                        const isDownloaded = sources.some(s => s.id === entry.id);
+                                        const isOutdated = sources.some(s => s.id === entry.id && s.cloud?.hash !== entry.hash);
+                                        return (
+                                            <DropdownMenuItem key={entry.id} onClick={() => handleCloudDownload(entry)} className="text-[12px] py-2 flex items-center justify-between">
+                                                <div className="flex items-center truncate">
+                                                    <Cloud className="w-4 h-4 mr-2.5 text-primary/60" />
+                                                    <span className="truncate" title={entry.title}>{entry.title} <span className="text-muted-foreground/50 ml-1">v{entry.version}</span></span>
+                                                </div>
+                                                {(isDownloaded && !isOutdated) ? (
+                                                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 ml-2 bg-green-500/10 text-green-600 border-none shrink-0">已下载</Badge>
+                                                ) : isOutdated ? (
+                                                    <Badge variant="outline" className="text-[9px] h-5 px-1.5 ml-2 bg-amber-500/10 text-amber-600 border-none shrink-0 animate-pulse">有更新</Badge>
+                                                ) : null}
+                                            </DropdownMenuItem>
+                                        );
+                                    })}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-none hover:bg-muted/50 transition-all">
@@ -464,29 +583,29 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-            {/* Empty Translation Explanation Dialog */}
-            <Dialog open={showEmptyDialog} onOpenChange={setShowEmptyDialog}>
-                <DialogContent className="sm:max-w-[425px] rounded-none border-border/60">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-amber-500">
-                            <span className="text-xl">⚠️</span>
-                            {t('Manager.Dialogs.EmptyTranslationTitle')}
-                        </DialogTitle>
-                        <DialogDescription className="pt-4 leading-relaxed text-foreground/80">
-                            {t('Manager.Dialogs.EmptyTranslationDesc')}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter className="mt-6 flex justify-center">
-                        <Button 
-                            variant="secondary" 
-                            onClick={() => setShowEmptyDialog(false)}
-                            className="w-full rounded-none h-10 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20"
-                        >
-                            {t('Common.Actions.Confirm')}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                        {/* Empty Translation Explanation Dialog */}
+                        <Dialog open={showEmptyDialog} onOpenChange={setShowEmptyDialog}>
+                            <DialogContent className="sm:max-w-[425px] rounded-none border-border/60">
+                                <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-2 text-amber-500">
+                                        <span className="text-xl">⚠️</span>
+                                        {t('Manager.Dialogs.EmptyTranslationTitle')}
+                                    </DialogTitle>
+                                    <DialogDescription className="pt-4 leading-relaxed text-foreground/80">
+                                        {t('Manager.Dialogs.EmptyTranslationDesc')}
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter className="mt-6 flex justify-center">
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => setShowEmptyDialog(false)}
+                                        className="w-full rounded-none h-10 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                    >
+                                        {t('Common.Actions.Confirm')}
+                                    </Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </div>
             </div>

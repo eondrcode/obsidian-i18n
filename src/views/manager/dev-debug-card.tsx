@@ -9,7 +9,7 @@ interface DevDebugCardProps {
 
 export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
     const [isActionRunning, setIsActionRunning] = useState(false);
-    
+
     // 拖拽相关状态
     const [position, setPosition] = useState(() => {
         const saved = localStorage.getItem('i18n-debug-pos');
@@ -44,8 +44,8 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
     useEffect(() => {
         const onMouseMove = (e: MouseEvent) => {
             if (!isDragging) return;
-            const pos = { 
-                x: Math.max(0, Math.min(e.clientX - dragOffset.current.x, window.innerWidth - 240)), 
+            const pos = {
+                x: Math.max(0, Math.min(e.clientX - dragOffset.current.x, window.innerWidth - 240)),
                 y: Math.max(0, Math.min(e.clientY - dragOffset.current.y, window.innerHeight - 100))
             };
             setPosition(pos);
@@ -106,10 +106,10 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                     // @ts-ignore
                     const plugin = i18n.app.plugins.manifests[state.id];
                     if (!plugin) continue;
-                    
+
                     // @ts-ignore
                     const pluginDir = path.join(path.normalize(i18n.app.vault.adapter.getBasePath()), plugin.dir ?? '');
-                    
+
                     const success = await i18n.backupManager.restoreBackup(state.id, pluginDir);
                     if (success) {
                         i18n.stateManager.setPluginState(state.id, { ...state, isApplied: false });
@@ -158,20 +158,20 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
     // [新增] 删除所有翻译文件
     const handleDeleteAll = async () => {
         if (!confirm('🛑 警告：确定要删除所有本地翻译文件吗？此操作不可撤销！')) return;
-        
+
         const shouldRestore = confirm('在删除文件前，是否先将所有插件还原为原始源码状态？\n(建议选择“是”，否则已被翻译的插件将保持翻译状态且无法通过插件还原)');
-        
+
         setIsActionRunning(true);
         try {
             if (shouldRestore) {
                 await handleOneClickRestore();
             }
-            
+
             // 清理文件和元数据
             i18n.sourceManager.clearAll();
             // 清理应用状态
             i18n.stateManager.clearAllStates();
-            
+
             new Notice('所有翻译文件及重置状态已清理完毕');
         } catch (e) {
             console.error(e);
@@ -199,7 +199,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
     };
 
     return (
-        <div 
+        <div
             ref={cardRef}
             style={{
                 position: 'fixed',
@@ -218,7 +218,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
             }}
         >
             {/* Header / Drag Handle */}
-            <div 
+            <div
                 onMouseDown={onMouseDown}
                 style={{
                     padding: '10px 12px',
@@ -238,8 +238,8 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
 
             {/* Content */}
             <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button 
-                    onClick={handleReload} 
+                <button
+                    onClick={handleReload}
                     disabled={isActionRunning}
                     style={{
                         padding: '8px',
@@ -253,7 +253,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     {isActionRunning ? '♻️...' : '♻️ 重载'}
                 </button>
-                <button 
+                <button
                     onClick={handleSnapshot}
                     style={{
                         padding: '8px',
@@ -267,7 +267,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     📸 快照
                 </button>
-                <button 
+                <button
                     onClick={handleSync}
                     style={{
                         padding: '8px',
@@ -281,7 +281,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     ⚡ 同步
                 </button>
-                <button 
+                <button
                     onClick={handleClearCache}
                     style={{
                         padding: '8px',
@@ -295,9 +295,9 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     🗑️ 清理
                 </button>
-                
+
                 {/* 底部功能区 */}
-                <button 
+                <button
                     onClick={handleOneClickRestore}
                     disabled={isActionRunning}
                     style={{
@@ -313,7 +313,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     ⏪ 一键还原 (恢复源码)
                 </button>
-                <button 
+                <button
                     onClick={handleOneClickReplace}
                     disabled={isActionRunning}
                     style={{
@@ -329,7 +329,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                 >
                     🔄 一键替换 (重新翻译)
                 </button>
-                <button 
+                <button
                     onClick={handleDeleteAll}
                     disabled={isActionRunning}
                     style={{
@@ -351,7 +351,7 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
 
             {/* Footer */}
             <div style={{ padding: '8px 12px', fontSize: '10px', opacity: 0.6, borderTop: `1px solid ${colors.border}` }}>
-                AutoUpdate: {i18n.settings.automaticUpdate ? '✅' : '❌'}<br/>
+                AutoUpdate: {i18n.settings.automaticUpdate ? '✅' : '❌'}<br />
                 Native HTML/CSS Debugger.
             </div>
         </div>

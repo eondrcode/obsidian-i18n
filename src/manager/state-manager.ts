@@ -153,7 +153,7 @@ export class StateManager {
                                 }
                             } catch (e) { }
                         }
-                        
+
                         const state = this.getThemeState(themeId);
                         if (state) {
                             if (state.pluginVersion !== currentVersion) {
@@ -188,13 +188,13 @@ export class StateManager {
             if (!manifests[id]) {
                 // 插件已卸载
                 const state = this.data.plugins[id];
-                
+
                 // 如果是已应用状态，先尝试还原 (还原操作内部会处理备份文件的删除)
                 if (state.isApplied && this.plugin.backupManager.hasBackup(id)) {
                     // @ts-ignore
                     const basePath = app.vault.adapter.getBasePath ? path.normalize(app.vault.adapter.getBasePath()) : '';
                     const pluginDir = path.join(basePath, app.vault.configDir, 'plugins', id);
-                    
+
                     try {
                         await this.plugin.backupManager.restoreBackup(id, pluginDir);
                         console.log(`[i18n] Restored and cleaned up backup for uninstalled plugin: ${id}`);

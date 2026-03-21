@@ -2,7 +2,6 @@ name: "Release Obsidian plugin"
 
 on:
   push:
-    # 仅在由于推送新标签（例如 v1.0.0）时触发
     tags:
       - "*"
 
@@ -19,7 +18,7 @@ jobs:
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "20.x" # 根据项目需求调整，通常 18+ 或 20+
+          node-version: "20.x"
 
       - name: Install dependencies
         run: npm install
