@@ -15,12 +15,9 @@ export class InjectorManager {
     /**
      * 自动更新翻译 (注入器)
      */
-    public async run(app: App, isManual: boolean = false) {
+    public async run(app: App) {
         if (this.i18n.settings.automaticUpdate) {
             let plugins: PluginManifest[] = [];
-            if (isManual) {
-                this.i18n.notice.successPrefix(t('Settings.Basis.SmartTitle'), t('Settings.Basis.SmartChecking'));
-            }
 
             // @ts-ignore
             plugins = Object.values(app.plugins.manifests).filter(item => item.id !== 'i18n');
@@ -69,8 +66,6 @@ export class InjectorManager {
 
             if (updateitem > 0) {
                 this.i18n.notice.successPrefix(t('Settings.Basis.SmartTitle'), `${t('Settings.Basis.SmartUpdate')}${updateitem}${t('Settings.Basis.SmartPlugins')}`);
-            } else if (isManual) {
-                this.i18n.notice.successPrefix(t('Settings.Basis.SmartTitle'), t('Settings.Basis.SmartNoUpdates'));
             }
         }
 

@@ -1,35 +1,24 @@
 import BaseSetting from "../base-setting";
-import { Setting, Notice, requestUrl } from "obsidian";
+import { Setting, Notice, requestUrl, setIcon } from "obsidian";
 import { SUPPORTED_LANGUAGES } from '@/src/constants/languages';
 import { t } from "src/locales";
 
 export default class I18nBasis extends BaseSetting {
     main(): void {
-        const headerClass = 'mt-6 mb-3 text-emerald-600 font-bold border-b border-emerald-600/10 pb-1.5 px-1';
 
-        // 1. 检查更新 (Section 1)
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderUpdate'), cls: headerClass });
+        // 1. 更新
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.UpdateHeader'));
 
         new Setting(this.containerEl)
             .setName(t('Settings.Basis.UpdateTitle'))
             .setDesc(t('Settings.Basis.UpdateDesc'))
-            .addButton(cb => {
-                cb.setButtonText(t('Settings.Basis.UpdateBtn'))
-                    .onClick(async () => {
-                        await this.i18n.coreManager.applyUpdate();
-                        this.settingTab.basisDisplay();
-                    });
-                if (!this.i18n.coreManager.updatesMark) {
-                    cb.buttonEl.style.display = 'none';
-                }
-            })
             .addToggle(cb => cb
                 .setValue(this.settings.checkUpdates)
                 .onChange(async () => {
                     this.settings.checkUpdates = !this.settings.checkUpdates;
                     await this.i18n.saveSettings();
                     if (this.settings.checkUpdates) {
-                        await this.i18n.coreManager.checkUpdates(true);
+                        await this.i18n.coreManager.checkUpdates();
                     } else {
                         this.i18n.coreManager.updatesMark = false;
                         this.i18n.coreManager.updatesVersion = '';
@@ -50,8 +39,8 @@ export default class I18nBasis extends BaseSetting {
                     })
             );
 
-        // 2. 基础配置 (Section 2)
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderBasis'), cls: headerClass });
+        // 2. 通用
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.BasisHeader'));
 
         new Setting(this.containerEl)
             .setName(t('Settings.Basis.LangTitle'))
@@ -91,73 +80,21 @@ export default class I18nBasis extends BaseSetting {
                 })
             );
 
-        // 3. 自动化任务 (Section 3 - Merged from i18n-auto.ts)
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderAuto'), cls: headerClass });
+
+        // 3. 网络
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.CloudHeader'));
 
         new Setting(this.containerEl)
-            .setName(t('Settings.Basis.AutoApplyTitle'))
-            .setDesc(t('Settings.Basis.AutoApplyDesc'))
-            .addToggle(cb => cb
-                .setValue(this.settings.autoApply)
-                .onChange(async (value) => {
-                    this.settings.autoApply = value;
-                    await this.i18n.saveSettings();
-                })
-            );
-
-        new Setting(this.containerEl)
-            .setName(t('Settings.Basis.AutoSilentTitle'))
-            .setDesc(t('Settings.Basis.AutoSilentDesc'))
-            .addToggle(cb => cb
-                .setValue(this.settings.autoSilentMode)
-                .onChange(async (value) => {
-                    this.settings.autoSilentMode = value;
-                    await this.i18n.saveSettings();
-                })
-            );
-
-        new Setting(this.containerEl)
-            .setName(t('Settings.Basis.AutoTrustedReposTitle'))
-            .setDesc(t('Settings.Basis.AutoTrustedReposDesc'))
-            .addTextArea(cb => cb
-                .setPlaceholder(t('Settings.Basis.AutoTrustedReposPlaceholder'))
-                .setValue(this.settings.autoTrustedRepos.join('\n'))
-                .onChange(async (value) => {
-                    this.settings.autoTrustedRepos = value.split('\n').map(v => v.trim()).filter(v => v.length > 0);
-                    await this.i18n.saveSettings();
-                })
-            );
-
-        // 4. 外部链接 (Section 4)
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderExternal'), cls: headerClass });
-
-        new Setting(this.containerEl)
-            .setName(t('Settings.Basis.ManagerTitle'))
-            .setDesc(t('Settings.Basis.ManagerDesc'))
-            .addButton((cb) => {
-                cb.setButtonText(t('Settings.Basis.ManagerBtn'))
-                    .onClick(() => {
-                        window.open('https://github.com/eondrcode/obsidian-manager');
-                    });
-            });
-
-        // 5. 云端中心
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.CloudRepoHeader' as any) || '云端中心', cls: headerClass });
-
-        new Setting(this.containerEl)
-            .setName(t('Settings.Basis.DefaultCloudRepoTitle' as any) || '默认云端仓库')
-            .setDesc(t('Settings.Basis.DefaultCloudRepoDesc' as any) || '在此配置默认的云端翻译库，设置后将在管理器的项目下拉框中展示该库的可用翻译版本以供一键下载。')
+            .setName(t('Settings.Basis.DefaultCloudRepoTitle'))
+            .setDesc(t('Settings.Basis.DefaultCloudRepoDesc'))
             .addText(cb => cb
-                .setPlaceholder(t('Settings.Basis.DefaultCloudRepoPlaceholder' as any) || '例如：eondrcode/obsidian-i18n-resources')
+                .setPlaceholder(t('Settings.Basis.DefaultCloudRepoPlaceholder'))
                 .setValue(this.settings.defaultCloudRepo)
                 .onChange(async (value) => {
                     this.settings.defaultCloudRepo = value;
                     await this.i18n.saveSettings();
                 })
             );
-
-        // 6. 网络配置
-        this.containerEl.createEl('h3', { text: t('Settings.Basis.HeaderNetwork'), cls: headerClass });
 
         const proxyOptions = {
             '': t('Settings.Basis.ProxyDirect'),
@@ -224,5 +161,92 @@ export default class I18nBasis extends BaseSetting {
                 })
             );
 
+        // 4. 自动化
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.AutoHeader'));
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoApplyTitle'))
+            .setDesc(t('Settings.Basis.AutoApplyDesc'))
+            .addToggle(cb => cb
+                .setValue(this.settings.autoApply)
+                .onChange(async (value) => {
+                    this.settings.autoApply = value;
+                    await this.i18n.saveSettings();
+                })
+            );
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoSilentTitle'))
+            .setDesc(t('Settings.Basis.AutoSilentDesc'))
+            .addToggle(cb => cb
+                .setValue(this.settings.autoSilentMode)
+                .onChange(async (value) => {
+                    this.settings.autoSilentMode = value;
+                    await this.i18n.saveSettings();
+                })
+            );
+
+        new Setting(this.containerEl)
+            .setName(t('Settings.Basis.AutoTrustedReposTitle'))
+            .setDesc(t('Settings.Basis.AutoTrustedReposDesc'))
+            .addTextArea(cb => cb
+                .setPlaceholder(t('Settings.Basis.AutoTrustedReposPlaceholder'))
+                .setValue(this.settings.autoTrustedRepos.join('\n'))
+                .onChange(async (value) => {
+                    this.settings.autoTrustedRepos = value.split('\n').map(v => v.trim()).filter(v => v.length > 0);
+                    await this.i18n.saveSettings();
+                })
+            );
+
+
+        // 5. 推荐
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.ExternalHeader'));
+
+        const card = this.containerEl.createDiv({ cls: 'i18n-recommend-card' });
+        card.style.border = '1px solid var(--background-modifier-border)';
+        card.style.borderRadius = '8px';
+        card.style.padding = '16px';
+        card.style.margin = '10px 0';
+        card.style.backgroundColor = 'var(--background-secondary)';
+        card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+
+        const cardHeader = card.createDiv();
+        cardHeader.style.display = 'flex';
+        cardHeader.style.alignItems = 'center';
+        cardHeader.style.gap = '10px';
+        cardHeader.style.marginBottom = '8px';
+
+        const iconContainer = cardHeader.createDiv();
+        iconContainer.style.color = 'var(--text-accent)';
+        setIcon(iconContainer, 'blocks');
+
+        const titleEl = cardHeader.createEl('b', {
+            text: t('Settings.Basis.ManagerTitle'),
+            cls: 'text-lg font-semibold'
+        });
+        titleEl.style.color = 'var(--text-normal)';
+
+        const descEl = card.createDiv({
+            text: t('Settings.Basis.ManagerDesc'),
+            cls: 'setting-item-description'
+        });
+        descEl.style.margin = '0';
+        descEl.style.marginBottom = '12px';
+        descEl.style.lineHeight = '1.6';
+        descEl.style.fontSize = '0.9em';
+
+        const footer = card.createDiv();
+        footer.style.display = 'flex';
+        footer.style.justifyContent = 'flex-end';
+
+        const btn = footer.createEl('button', {
+            text: t('Settings.Basis.ManagerBtn'),
+            cls: 'mod-cta'
+        });
+        btn.style.backgroundColor = 'var(--interactive-accent)';
+        btn.style.color = 'white';
+        btn.onclick = () => {
+            window.open('obsidian://show-plugin?id=better-plugins-manager');
+        };
     }
 }

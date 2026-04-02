@@ -41,24 +41,6 @@ export default class I18nRE extends BaseSetting {
                 })
             );
 
-        // ==============================
-        // 2. 提取过滤设置
-        // ==============================
-        new Setting(containerEl)
-            .setName(t('Settings.Re.FilterHeader'))
-            .setHeading();
-
-        // 忽略模版文件
-        new Setting(containerEl)
-            .setName(t('Settings.Re.TempTitle'))
-            .setDesc(t('Settings.Re.TempDesc'))
-            .addToggle(cb => cb
-                .setValue(this.settings.reTempMode)
-                .onChange(async (value) => {
-                    this.settings.reTempMode = value;
-                    await this.i18n.saveSettings();
-                })
-            );
 
         // ==============================
         // 3. 正则匹配数据管理

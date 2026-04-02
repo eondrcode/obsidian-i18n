@@ -79,8 +79,6 @@ export interface I18nSettings {
     // ==============================
     // 正则提取匹配规则
     // ==============================
-    reTemp: string;           // 临时测试用的正则表达式片段
-    reTempMode: boolean;     // 临时正则匹配模式开关
     reFlags: string;          // 正则表达式的匹配修饰符 (默认: gs)
     reLength: number;         // 提取文本的最大长度限制
     reDatas: string[];        // 核心源码中用于捕获文本的正式正则表达式列表
@@ -163,8 +161,8 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     llmOpenaiProfiles: [],
     llmOpenaiActiveProfileId: '',
     llmUseCustomPrice: true,
-    llmPriceInputCustom: 1.1,
-    llmPriceOutputCustom: 4.4,
+    llmPriceInputCustom: 0,
+    llmPriceOutputCustom: 0,
 
     // ==============================
     // 沉浸式翻译配置 (IMT)
@@ -186,8 +184,6 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     // 正则匹配
     // ==============================
-    reTempMode: true,        // 默认启用正则临时模式
-    reTemp: '',               // 默认无临时正则
     reFlags: 'gs',            // 默认全局搜索+忽略多行等限制
     reLength: 300,            // 默认限制文本最长 300 字符
     reDatas: [
@@ -241,7 +237,7 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     githubProxyUrl: 'https://ghp.ci/',
 
     cloudRepos: [],
-    defaultCloudRepo: 'eondrcode/obsidian-i18n-resources',
+    defaultCloudRepo: '',
 
     // ==============================
     // 管理器状态持久化

@@ -1,4 +1,3 @@
-import { PluginManifest } from 'obsidian';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { t } from '../locales';
@@ -12,7 +11,6 @@ export class CoreManager {
     // [更新相关] - 插件版本更新状态
     updatesMark = false;        // [变量] 是否存在更新标记
     updatesVersion: string;     // [变量] 更新版本
-    latestRelease: any;         // [变量] 最新 Release 数据
 
 
     // [变量] 样式
@@ -39,7 +37,7 @@ export class CoreManager {
     public async firstRun() {
     }
 
-    public async checkUpdates(isManual: boolean = false) {
+    public async checkUpdates() {
         // 使用 GitHub API 获取最新 Release
         const owner = 'eondrcode'; // 插件所有者
         const repo = 'obsidian-i18n'; // 插件仓库名
@@ -50,71 +48,12 @@ export class CoreManager {
             if (this.i18n.manifest.version !== latestVersion) {
                 const noticeStr = `${t('Settings.Basis.CheckUpdateNotice')}(${latestVersion})\n${res.data.body || ''}`;
                 this.i18n.notice.primaryPrefix(t('Settings.Basis.CheckUpdatePrefix'), noticeStr, 15000);
-
-                // 添加点击更新功能（如果 NoticeManager 支持或通过设置界面触发）
                 this.updatesMark = true;
                 this.updatesVersion = latestVersion;
-                this.latestRelease = res.data; // 暂存最新 Release 数据以供下载
-            } else if (isManual) {
-                this.i18n.notice.successPrefix(t('Settings.Basis.CheckUpdatePrefix'), t('Settings.Basis.IsLatest'));
             }
-        } else if (isManual) {
-            this.i18n.notice.resultPrefix(t('Settings.Basis.CheckUpdatePrefix'), false, String(res.data));
         }
     }
 
-    /**
-     * 应用更新：下载并覆盖插件文件
-     */
-    public async applyUpdate() {
-        if (!this.latestRelease) {
-            this.i18n.notice.error(t('Settings.Basis.NoUpdatesFound'));
-            return;
-        }
-
-        this.i18n.notice.info(t('Settings.Basis.Updating'));
-        try {
-            const assets = this.latestRelease.assets;
-            const filesToDownload = ['main.js', 'manifest.json', 'styles.css'];
-
-            // @ts-ignore
-            const pluginDir = path.join(path.normalize(this.i18n.app.vault.adapter.getBasePath()), this.i18n.manifest.dir);
-
-            for (const fileName of filesToDownload) {
-                const asset = assets.find((a: any) => a.name === fileName);
-                if (asset) {
-                    const downloadRes = await this.i18n.api.github.downloadAsset(asset.browser_download_url);
-                    if (downloadRes.state) {
-                        const targetPath = path.join(pluginDir, fileName);
-                        // 如果是编译后的 JS 或 CSS，通常是文本或二进制
-                        const content = downloadRes.data;
-                        if (content instanceof ArrayBuffer) {
-                            await fs.writeFile(targetPath, Buffer.from(content));
-                        } else {
-                            await fs.writeFile(targetPath, content);
-                        }
-                    }
-                }
-            }
-
-            this.i18n.notice.success(t('Settings.Basis.UpdateSuccessRestart'));
-            this.updatesMark = false;
-
-            // 自动重载机制
-            setTimeout(async () => {
-                try {
-                    // @ts-ignore
-                    await this.i18n.app.plugins.disablePlugin(this.i18n.manifest.id);
-                    // @ts-ignore
-                    await this.i18n.app.plugins.enablePlugin(this.i18n.manifest.id);
-                } catch (e) {
-                    console.error("[i18n] Failed to self-reload plugin:", e);
-                }
-            }, 1000);
-        } catch (error) {
-            this.i18n.notice.error(`${t('Settings.Basis.UpdateFailed')}: ${error}`);
-        }
-    }
 
 
 

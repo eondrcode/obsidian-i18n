@@ -70,7 +70,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
                     this.settings.llmUseCustomPrice = newProfile.useCustomPrice;
                     this.settings.llmPriceInputCustom = newProfile.priceInput;
                     this.settings.llmPriceOutputCustom = newProfile.priceOutput;
-                    
+
                     await this.i18n.saveSettings();
                     new Notice(t('Settings.Ai.ProfileAddNotice'));
                     this.refreshUI();
@@ -90,7 +90,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
 
                     const activeId = this.settings.llmOpenaiActiveProfileId;
                     this.settings.llmOpenaiProfiles = this.settings.llmOpenaiProfiles.filter(p => p.id !== activeId);
-                    
+
                     // 激活第一个
                     const nextProfile = this.settings.llmOpenaiProfiles[0];
                     this.settings.llmOpenaiActiveProfileId = nextProfile.id;
@@ -100,7 +100,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
                     this.settings.llmUseCustomPrice = nextProfile.useCustomPrice;
                     this.settings.llmPriceInputCustom = nextProfile.priceInput;
                     this.settings.llmPriceOutputCustom = nextProfile.priceOutput;
-                    
+
                     await this.i18n.saveSettings();
                     this.refreshUI();
                 });
@@ -168,7 +168,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
 
     private configUI(): void {
         new Setting(this.containerEl).setName(t('Settings.Ai.TestHeader')).setHeading();
-        
+
         // OpenAI 返回格式配置
         new Setting(this.containerEl)
             .setName(t('Settings.Ai.ResponseFormatTitle'))
@@ -200,9 +200,11 @@ export default class I18nLLMOpenAI extends BaseSetting {
                             return;
                         }
 
-                        // 初始化测试器
-                        const tester = new ConnectivityTester(llmOpenaiUrl, llmOpenaiKey, llmOpenaiModel);
-                        
+                        const tester = new ConnectivityTester(
+                            llmOpenaiUrl, llmOpenaiKey, llmOpenaiModel,
+                            this.settings.llmResponseFormat, this.settings.llmTimeout
+                        );
+
                         try {
                             btn.setDisabled(true).setButtonText(t('Settings.Ai.TestLoading'));
 
@@ -319,7 +321,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
 
     private priceUI(activeProfile: any): void {
         // 价格配置 - 直接在一行中根据输入激活
-        
+
         // 输入价格
         new Setting(this.containerEl)
             .setName(t('Settings.Ai.PriceInputTitle'))
@@ -330,10 +332,10 @@ export default class I18nLLMOpenAI extends BaseSetting {
                 .onChange(async (value) => {
                     const val = parseFloat(value);
                     const isValid = !isNaN(val) && value.trim() !== '';
-                    
+
                     this.settings.llmPriceInputCustom = isValid ? val : 0;
                     if (activeProfile) activeProfile.priceInput = this.settings.llmPriceInputCustom;
-                    
+
                     // 自动判断是否启用自定义计费
                     this.updateCustomPriceFlag(activeProfile);
                     await this.i18n.saveSettings();
@@ -350,10 +352,10 @@ export default class I18nLLMOpenAI extends BaseSetting {
                 .onChange(async (value) => {
                     const val = parseFloat(value);
                     const isValid = !isNaN(val) && value.trim() !== '';
-                    
+
                     this.settings.llmPriceOutputCustom = isValid ? val : 0;
                     if (activeProfile) activeProfile.priceOutput = this.settings.llmPriceOutputCustom;
-                    
+
                     // 自动判断是否启用自定义计费
                     this.updateCustomPriceFlag(activeProfile);
                     await this.i18n.saveSettings();
@@ -365,7 +367,7 @@ export default class I18nLLMOpenAI extends BaseSetting {
         const hasInput = this.settings.llmPriceInputCustom > 0;
         const hasOutput = this.settings.llmPriceOutputCustom > 0;
         const enable = hasInput || hasOutput;
-        
+
         this.settings.llmUseCustomPrice = enable;
         if (activeProfile) activeProfile.useCustomPrice = enable;
     }

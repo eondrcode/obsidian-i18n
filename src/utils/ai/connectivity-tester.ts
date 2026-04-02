@@ -20,8 +20,10 @@ export interface DeepDiagnosticReport {
     endpoint: DiagItem;
     auth: DiagItem;
     model: DiagItem;
+    systemRole: DiagItem;
     jsonMode: DiagItem;
     jsonSchema: DiagItem;
+    translation: DiagItem;
     logs: DiagnosticLog[];
 }
 
@@ -29,12 +31,16 @@ export class ConnectivityTester {
     private url: string;
     private key: string;
     private model: string;
+    private responseFormat: string;
+    private timeout: number;
     private logs: DiagnosticLog[] = [];
 
-    constructor(url: string, key: string, model: string) {
+    constructor(url: string, key: string, model: string, responseFormat?: string, timeout?: number) {
         this.url = (url || '').trim();
         this.key = key.trim();
         this.model = model.trim();
+        this.responseFormat = responseFormat || 'text';
+        this.timeout = timeout || 60000;
     }
 
     private addLog(stage: string, message: string, level: 'info' | 'warn' | 'error' = 'info') {
@@ -49,8 +55,10 @@ export class ConnectivityTester {
             endpoint: { status: 'na', value: this.url },
             auth: { status: 'na', value: '***' },
             model: { status: 'na', value: this.model || 'N/A' },
+            systemRole: { status: 'na', value: 'Not Tested' },
             jsonMode: { status: 'na', value: 'Not Tested' },
             jsonSchema: { status: 'na', value: 'Not Tested' },
+            translation: { status: 'na', value: 'Not Tested' },
             logs: this.logs
         };
 
@@ -78,7 +86,6 @@ export class ConnectivityTester {
                 report.endpoint.value = `${this.url} (${res.status})`;
                 this.addLog('Endpoint', `Reachable (Latency: ${latency}ms, Status: ${res.status})`);
 
-                // 检查是否缺少 /v1 (现在会自动补全，但可以提示由于没输 /v1 导致基础连接尝试的状态)
                 if (!this.url.includes('/v1') && !this.url.includes('openai.com') && !this.url.includes('anthropic')) {
                     this.addLog('Endpoint', 'Base URL does not contain /v1, automatically appending for API calls', 'info');
                 }
@@ -117,7 +124,7 @@ export class ConnectivityTester {
             return report;
         }
 
-        // --- Stage 3: Model & Capabilities ---
+        // --- Stage 3: Model Availability ---
         if (!this.model) {
             report.model.status = 'warn';
             report.model.tip = 'No model name provided';
@@ -128,7 +135,6 @@ export class ConnectivityTester {
         onProgress?.(t('Settings.Ai.TestStageModel'));
         this.addLog('Model', `Testing model availability: ${this.model}`);
 
-        // 3.1 Standard Chat Test
         const modelStartTime = Date.now();
         const modelRes = await this.safeRequest(`${baseUrlV1}/chat/completions`, 'POST', true, {
             model: this.model,
@@ -148,9 +154,35 @@ export class ConnectivityTester {
             return report;
         }
 
-        // 3.2 JSON Mode Test
+        // --- Stage 3.5: System Role Support ---
+        onProgress?.(t('Settings.Ai.DiagStageSystemRole'));
+        this.addLog('SystemRole', 'Testing system role support');
+
+        const sysRoleStartTime = Date.now();
+        const sysRoleRes = await this.safeRequest(`${baseUrlV1}/chat/completions`, 'POST', true, {
+            model: this.model,
+            messages: [
+                { role: 'system', content: 'You are a helpful assistant. Reply only with: OK' },
+                { role: 'user', content: 'hi' }
+            ],
+            max_tokens: 5
+        });
+        report.systemRole.latency = Date.now() - sysRoleStartTime;
+
+        if (sysRoleRes.status === 200) {
+            report.systemRole.status = 'pass';
+            report.systemRole.value = 'Supported';
+            this.addLog('SystemRole', 'System role is supported');
+        } else {
+            report.systemRole.status = 'fail';
+            report.systemRole.tip = t('Settings.Ai.DiagTipSystemRole');
+            report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
+            this.addLog('SystemRole', `System role test failed (${sysRoleRes.status})`, 'warn');
+        }
+
+        // --- Stage 4: JSON Mode Test ---
         this.addLog('Capabilities', 'Testing JSON Mode support');
-        onProgress?.(`${t('Settings.Ai.DiagItemJsonMode')}...`);
+        onProgress?.(`${t('Settings.Ai.DiagItemJsonMode')}…`);
         const jsonModeRes = await this.safeRequest(`${baseUrlV1}/chat/completions`, 'POST', true, {
             model: this.model,
             messages: [{ role: 'user', content: 'respond with json: {"ok":true}' }],
@@ -163,14 +195,14 @@ export class ConnectivityTester {
             this.addLog('Capabilities', 'JSON Mode is supported');
         } else {
             report.jsonMode.status = 'fail';
-            report.jsonMode.tip = 'This model or endpoint does not support json_object format';
+            report.jsonMode.tip = 'JSON Mode not supported';
             report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
             this.addLog('Capabilities', `JSON Mode test failed (${jsonModeRes.status})`, 'warn');
         }
 
-        // 3.3 Structured Outputs (JSON Schema) Test
+        // --- Stage 5: Structured Outputs (JSON Schema) Test ---
         this.addLog('Capabilities', 'Testing Structured Outputs (JSON Schema) support');
-        onProgress?.(`${t('Settings.Ai.DiagItemJsonSchema')}...`);
+        onProgress?.(`${t('Settings.Ai.DiagItemJsonSchema')}…`);
         const jsonSchemaRes = await this.safeRequest(`${baseUrlV1}/chat/completions`, 'POST', true, {
             model: this.model,
             messages: [{ role: 'user', content: 'respond with schema' }],
@@ -193,6 +225,127 @@ export class ConnectivityTester {
             report.jsonSchema.tip = t('Settings.Ai.DiagTipModelFallback');
             report.overallStatus = 'degraded';
             this.addLog('Capabilities', `Structured Outputs test failed (${jsonSchemaRes.status})`, 'warn');
+        }
+
+        // --- Stage 6: Translation Simulation (End-to-End) ---
+        onProgress?.(t('Settings.Ai.DiagStageTranslation'));
+        this.addLog('Translation', 'Running translation simulation with real prompt');
+
+        const translationBody: any = {
+            model: this.model,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a translator. Translate the input JSON array. Each object has "i" (id, keep unchanged) and "s" (source text). Return a JSON array where each object has "i" and "t" (translated text). Target language: 简体中文. ONLY return the JSON array, no other text.'
+                },
+                {
+                    role: 'user',
+                    content: JSON.stringify([{ i: 1, s: "Settings" }, { i: 2, s: "Cancel" }])
+                }
+            ],
+            max_tokens: 100,
+            temperature: 0.3,
+        };
+
+        // 使用用户实际选择的 response_format
+        if (this.responseFormat === 'json_object') {
+            translationBody.response_format = { type: 'json_object' };
+        } else if (this.responseFormat === 'json_schema') {
+            translationBody.response_format = {
+                type: 'json_schema',
+                json_schema: {
+                    name: "translation_result",
+                    schema: {
+                        type: "object",
+                        properties: {
+                            items: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: { i: { type: "number" }, t: { type: "string" } },
+                                    required: ["i", "t"],
+                                    additionalProperties: false
+                                }
+                            }
+                        },
+                        required: ["items"],
+                        additionalProperties: false
+                    },
+                    strict: true
+                }
+            };
+        }
+        // 'text' 模式不设置 response_format
+
+        const transStartTime = Date.now();
+        try {
+            const transRes = await this.safeRequest(`${baseUrlV1}/chat/completions`, 'POST', true, translationBody);
+            const transLatency = Date.now() - transStartTime;
+            report.translation.latency = transLatency;
+
+            if (transRes.status !== 200) {
+                report.translation.status = 'fail';
+                report.translation.tip = `API 返回 ${transRes.status}`;
+                report.overallStatus = 'failed';
+                this.addLog('Translation', `Translation simulation failed with status ${transRes.status}`, 'error');
+            } else {
+                // 尝试解析返回内容
+                let parseSuccess = false;
+                try {
+                    const body = typeof transRes.json === 'object' ? transRes.json : JSON.parse(transRes.text);
+                    const content = body?.choices?.[0]?.message?.content;
+                    if (content) {
+                        let parsed: any;
+                        try {
+                            parsed = JSON.parse(content);
+                        } catch {
+                            // 尝试提取 markdown 代码块
+                            const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                            if (match) parsed = JSON.parse(match[1]);
+                        }
+
+                        // 处理 json_schema 包裹格式
+                        const resultArray = Array.isArray(parsed) ? parsed : (parsed?.items ? parsed.items : null);
+
+                        if (resultArray && Array.isArray(resultArray) && resultArray.length > 0) {
+                            const hasCorrectFields = resultArray.every((item: any) =>
+                                typeof item.i === 'number' && typeof item.t === 'string'
+                            );
+                            const idsMatch = resultArray.some((item: any) => item.i === 1 || item.i === 2);
+
+                            if (hasCorrectFields && idsMatch) {
+                                parseSuccess = true;
+                                report.translation.status = 'pass';
+                                report.translation.value = `OK (${transLatency}ms)`;
+                                this.addLog('Translation', `Simulation passed: received ${resultArray.length} items in ${transLatency}ms`);
+                            }
+                        }
+                    }
+                } catch (e: any) {
+                    this.addLog('Translation', `Response parse error: ${e.message}`, 'error');
+                }
+
+                if (!parseSuccess) {
+                    report.translation.status = 'fail';
+                    report.translation.tip = t('Settings.Ai.DiagTipTranslationFail');
+                    report.overallStatus = 'failed';
+                    this.addLog('Translation', 'Translation simulation returned unparseable or incorrect format', 'error');
+                }
+
+                // 延迟预警：如果简单 2 条翻译已接近超时阈值的 80%
+                if (parseSuccess && transLatency > this.timeout * 0.8) {
+                    report.translation.status = 'warn';
+                    report.translation.tip = t('Settings.Ai.DiagTipLatencyWarn');
+                    report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
+                    this.addLog('Translation', `Latency warning: ${transLatency}ms is close to timeout ${this.timeout}ms`, 'warn');
+                }
+            }
+        } catch (err: any) {
+            report.translation.status = 'fail';
+            report.translation.latency = Date.now() - transStartTime;
+            report.translation.tip = err.message?.includes('timeout') ? t('Settings.Ai.TestFailTimeout') : t('Settings.Ai.DiagTipTranslationFail');
+            report.overallStatus = 'failed';
+            this.addLog('Translation', `Translation simulation error: ${err.message}`, 'error');
         }
 
         return report;

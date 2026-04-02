@@ -26,9 +26,6 @@ export class RegexTranslator {
     private initPatterns() {
         // 初始化核心匹配正则
         const regexps = [...(this.settings.reDatas || [])];
-        if (this.settings.reTempMode && this.settings.reTemp) {
-            regexps.push(...this.settings.reTemp.split('|'));
-        }
         this.patterns = regexps.filter(p => p !== '').map(p => new RegExp(p, this.settings.reFlags || 'gs'));
 
         // 初始化过滤正则 (排除型)
