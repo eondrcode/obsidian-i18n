@@ -414,7 +414,7 @@
     border-bottom-left-radius: 30px;
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
-    background-color: var(--i18n-color-primary);
+    background-color: var(--interactive-accent, #3b82f6);
     color: white;
     display: flex;
     align-items: center;

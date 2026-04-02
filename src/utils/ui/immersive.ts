@@ -21,9 +21,15 @@
 
 import { I18nSettings } from "src/settings/data";
 import Url from "src/constants/url";
+import { requestUrl } from "obsidian";
 
 // 定义接口
-declare global { interface Window { immersiveTranslateConfig: immersiveTranslateConfig } }
+declare global {
+    interface Window {
+        immersiveTranslateConfig: immersiveTranslateConfig;
+        GM_fetch?: any;
+    }
+}
 
 
 export class ImmersiveTranslate {
@@ -157,9 +163,68 @@ export class ImmersiveTranslate {
                 mountPoint: { selector: "#immersive-translate-panel", action: "child" },
                 disclaimerPoint: { selector: "#immersive-translate-disc", action: "child" },
                 pageRule: {
+                    mainFrameSelector: settings.imtPagerule.mainFrameSelector,
                     selectors: settings.imtPagerule.selectors,
-                    excludeSelectors: settings.imtPagerule.excludeSelectors
+                    excludeSelectors: settings.imtPagerule.excludeSelectors,
+                    stayOriginalSelectors: settings.imtPagerule.stayOriginalSelectors,
+                    extraBlockSelectors: settings.imtPagerule.extraBlockSelectors,
+                    extraInlineSelectors: settings.imtPagerule.extraInlineSelectors,
+                    translationClasses: settings.imtPagerule.translationClasses,
+                    injectedCss: settings.imtPagerule.injectedCss
                 },
+            };
+
+            // 注入 GM_fetch 以解决 Obsidian 环境下的 CORS 问题
+            window.GM_fetch = async (url: any, options: any = {}) => {
+                const urlStr = typeof url === 'string' ? url : url.url;
+                const method = options.method || 'GET';
+                const headers: Record<string, string> = { ...options.headers };
+                let body = undefined;
+
+                if (options.body && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
+                    if (typeof options.body === 'string') {
+                        body = options.body;
+                    } else if (options.body instanceof URLSearchParams) {
+                        body = options.body.toString();
+                        headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+                    } else {
+                        body = String(options.body);
+                    }
+                }
+
+                try {
+                    const res = await requestUrl({
+                        url: urlStr,
+                        method: method,
+                        headers: headers,
+                        body: body,
+                        throw: false
+                    });
+
+                    return {
+                        ok: res.status >= 200 && res.status < 300,
+                        status: res.status,
+                        statusText: '',
+                        headers: {
+                            get: (name: string) => {
+                                const lowerName = name.toLowerCase();
+                                const keys = Object.keys(res.headers);
+                                const key = keys.find(k => k.toLowerCase() === lowerName);
+                                return key ? res.headers[key] : null;
+                            },
+                            forEach: (callback: any) => {
+                                Object.entries(res.headers).forEach(([k, v]) => callback(v, k));
+                            }
+                        },
+                        url: urlStr,
+                        json: async () => res.json,
+                        text: async () => res.text,
+                        arrayBuffer: async () => res.arrayBuffer,
+                        clone: function () { return this; }
+                    };
+                } catch (e) {
+                    throw e;
+                }
             };
 
             // 创建一个新的script元素  
@@ -213,8 +278,8 @@ export interface immersiveTranslateConfig {
 
 export interface pageRule {
     mainFrameSelector?: string | string[];              // 翻译的根节点范围
-    selectors?: string[];                               // 仅翻译匹配到的元素
-    excludeSelectors?: string[];                        // 排除元素，不翻译匹配的元素
+    selectors?: string | string[];                      // 仅翻译匹配到的元素
+    excludeSelectors?: string | string[];               // 排除元素，不翻译匹配的元素
     stayOriginalSelectors?: string | string[];          // 匹配的元素将保持原样。常用于论坛网站的标签。
     extraBlockSelectors?: string | string[];            // 额外的选择器，匹配的元素将作为 block 元素，独占一行。
     extraInlineSelectors?: string | string[];           // 额外的选择器，匹配的元素将作为 inline 元素。

@@ -169,8 +169,17 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     modeImt: false,           // 默认关闭沉浸式
     imtPagerule: {
-        selectors: ["*"],
-        excludeSelectors: [],
+        selectors: [
+            ".mod-settings",
+            ".modal-container",
+            ".menu",
+            ".notice-container"
+        ],
+        excludeSelectors: [
+            ".markdown-source-view",
+            ".markdown-reading-view",
+            ".cm-editor"
+        ],
     },
 
     // ==============================

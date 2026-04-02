@@ -145,7 +145,19 @@ export default {
         ExcludeTitle: "排除选择器",
         ExcludeDesc: "精确指定需要排除的页面元素。",
         RestartNotice: "配置已更新，部分修改可能需要重启插件后生效。",
-        DescLabel: "描述："
+        DescLabel: "描述：",
+        MainFrameTitle: "根节点范围",
+        MainFrameDesc: "指定翻译的根节点范围 (如指定整个文章的容器)",
+        StayOriginalTitle: "保持原样选择器",
+        StayOriginalDesc: "匹配的元素将保持原样，常用于论坛网站的代码块或标签。",
+        ExtraBlockTitle: "块级元素选择器",
+        ExtraBlockDesc: "匹配的元素将被当作 block 块级元素处理，独占一行。",
+        ExtraInlineTitle: "行内元素选择器",
+        ExtraInlineDesc: "匹配的元素将被当作 inline 行内元素处理。",
+        TranslationClassesTitle: "译文类名 (Class)",
+        TranslationClassesDesc: "为生成的译文元素添加额外的 CSS 类名。",
+        InjectedCssTitle: "注入自定义 CSS",
+        InjectedCssDesc: "在页面中嵌入额外的 CSS 样式代码。"
     },
     Ai: {
         // ── 服务配置 ──

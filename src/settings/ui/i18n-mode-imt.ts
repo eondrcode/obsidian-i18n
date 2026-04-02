@@ -32,7 +32,7 @@ export default class I18nModIMT extends BaseSetting {
             notice: t('Settings.Immersive.MatchNotice')
         }));
         selectorsTextArea.addTextArea(cb => cb
-            .setValue(this.settings.imtPagerule.selectors ? this.settings.imtPagerule.selectors.join('\n') : '')
+            .setValue(this.settings.imtPagerule.selectors ? (Array.isArray(this.settings.imtPagerule.selectors) ? this.settings.imtPagerule.selectors.join('\n') : this.settings.imtPagerule.selectors) : '')
             .onChange(async (v) => {
                 this.settings.imtPagerule.selectors = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
                 await this.i18n.saveSettings();
@@ -50,13 +50,116 @@ export default class I18nModIMT extends BaseSetting {
             notice: ''
         }));
         excludeSelectorsTextArea.addTextArea(cb => cb
-            .setValue(this.settings.imtPagerule.excludeSelectors ? this.settings.imtPagerule.excludeSelectors.join('\n') : '')
+            .setValue(this.settings.imtPagerule.excludeSelectors ? (Array.isArray(this.settings.imtPagerule.excludeSelectors) ? this.settings.imtPagerule.excludeSelectors.join('\n') : this.settings.imtPagerule.excludeSelectors) : '')
             .onChange(async (v) => {
                 this.settings.imtPagerule.excludeSelectors = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');;
                 await this.i18n.saveSettings();
             })
             .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
         );
+
+        // [设置项] 根节点范围
+        const mainFrameTextArea = new Setting(this.containerEl);
+        mainFrameTextArea.setName(t('Settings.Immersive.MainFrameTitle'));
+        mainFrameTextArea.setDesc(createStructuredDesc({
+            type: 'string[]',
+            desc: t('Settings.Immersive.MainFrameDesc'),
+            example: '',
+        }));
+        mainFrameTextArea.addTextArea(cb => cb
+            .setValue(this.settings.imtPagerule.mainFrameSelector ? (Array.isArray(this.settings.imtPagerule.mainFrameSelector) ? this.settings.imtPagerule.mainFrameSelector.join('\n') : this.settings.imtPagerule.mainFrameSelector) : '')
+            .onChange(async (v) => {
+                this.settings.imtPagerule.mainFrameSelector = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
+                await this.i18n.saveSettings();
+            })
+            .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
+        );
+
+        // [设置项] 保持原样选择器
+        const stayOriginalTextArea = new Setting(this.containerEl);
+        stayOriginalTextArea.setName(t('Settings.Immersive.StayOriginalTitle'));
+        stayOriginalTextArea.setDesc(createStructuredDesc({
+            type: 'string[]',
+            desc: t('Settings.Immersive.StayOriginalDesc'),
+            example: '',
+        }));
+        stayOriginalTextArea.addTextArea(cb => cb
+            .setValue(this.settings.imtPagerule.stayOriginalSelectors ? (Array.isArray(this.settings.imtPagerule.stayOriginalSelectors) ? this.settings.imtPagerule.stayOriginalSelectors.join('\n') : this.settings.imtPagerule.stayOriginalSelectors) : '')
+            .onChange(async (v) => {
+                this.settings.imtPagerule.stayOriginalSelectors = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
+                await this.i18n.saveSettings();
+            })
+            .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
+        );
+
+        // [设置项] 额外块元素
+        const extraBlockTextArea = new Setting(this.containerEl);
+        extraBlockTextArea.setName(t('Settings.Immersive.ExtraBlockTitle'));
+        extraBlockTextArea.setDesc(createStructuredDesc({
+            type: 'string[]',
+            desc: t('Settings.Immersive.ExtraBlockDesc'),
+            example: '',
+        }));
+        extraBlockTextArea.addTextArea(cb => cb
+            .setValue(this.settings.imtPagerule.extraBlockSelectors ? (Array.isArray(this.settings.imtPagerule.extraBlockSelectors) ? this.settings.imtPagerule.extraBlockSelectors.join('\n') : this.settings.imtPagerule.extraBlockSelectors) : '')
+            .onChange(async (v) => {
+                this.settings.imtPagerule.extraBlockSelectors = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
+                await this.i18n.saveSettings();
+            })
+            .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
+        );
+
+        // [设置项] 额外行内元素
+        const extraInlineTextArea = new Setting(this.containerEl);
+        extraInlineTextArea.setName(t('Settings.Immersive.ExtraInlineTitle'));
+        extraInlineTextArea.setDesc(createStructuredDesc({
+            type: 'string[]',
+            desc: t('Settings.Immersive.ExtraInlineDesc'),
+            example: '',
+        }));
+        extraInlineTextArea.addTextArea(cb => cb
+            .setValue(this.settings.imtPagerule.extraInlineSelectors ? (Array.isArray(this.settings.imtPagerule.extraInlineSelectors) ? this.settings.imtPagerule.extraInlineSelectors.join('\n') : this.settings.imtPagerule.extraInlineSelectors) : '')
+            .onChange(async (v) => {
+                this.settings.imtPagerule.extraInlineSelectors = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
+                await this.i18n.saveSettings();
+            })
+            .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
+        );
+
+        // [设置项] 译文类名
+        const translationClassesTextArea = new Setting(this.containerEl);
+        translationClassesTextArea.setName(t('Settings.Immersive.TranslationClassesTitle'));
+        translationClassesTextArea.setDesc(createStructuredDesc({
+            type: 'string[]',
+            desc: t('Settings.Immersive.TranslationClassesDesc'),
+            example: '',
+        }));
+        translationClassesTextArea.addTextArea(cb => cb
+            .setValue(this.settings.imtPagerule.translationClasses ? (Array.isArray(this.settings.imtPagerule.translationClasses) ? this.settings.imtPagerule.translationClasses.join('\n') : this.settings.imtPagerule.translationClasses) : '')
+            .onChange(async (v) => {
+                this.settings.imtPagerule.translationClasses = v.split('\n').filter(item => typeof item === 'string' && item.trim() !== '');
+                await this.i18n.saveSettings();
+            })
+            .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); }
+        );
+
+        // [设置项] 注入 CSS
+        const injectedCssTextArea = new Setting(this.containerEl);
+        injectedCssTextArea.setName(t('Settings.Immersive.InjectedCssTitle'));
+        injectedCssTextArea.setDesc(createStructuredDesc({
+            type: 'string',
+            desc: t('Settings.Immersive.InjectedCssDesc'),
+            example: '',
+        }));
+        injectedCssTextArea.addTextArea(cb => {
+            cb.setValue(this.settings.imtPagerule.injectedCss ? (Array.isArray(this.settings.imtPagerule.injectedCss) ? this.settings.imtPagerule.injectedCss.join('\n') : this.settings.imtPagerule.injectedCss) : '')
+              .onChange(async (v) => {
+                  this.settings.imtPagerule.injectedCss = v;
+                  await this.i18n.saveSettings();
+              })
+              .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); };
+            cb.inputEl.setAttr("rows", 4);
+        });
     }
 }
 
@@ -75,4 +178,4 @@ const createStructuredDesc = (config: FieldConfig) => {
         fragment.createDiv({ text: config.notice });
     }
     return fragment;
-};
+};
