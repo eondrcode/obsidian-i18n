@@ -163,6 +163,7 @@ export default {
         ConfigHeader: "服务配置",
         Provider: "服务商",
         ProviderDesc: "选择 LLM 提供商。",
+        HomepageBtn: "获取 API Key (官网)",
         ProfileSelectTitle: "配置方案",
         ProfileSelectDesc: "切换不同 API 方案，如 OpenAI、DeepSeek、硅基流动。",
         ProfileAddBtn: "新增",
@@ -269,6 +270,45 @@ export default {
         OllamaFetchFailed: "无法连接 Ollama 服务，请检查是否已启动。",
         OllamaConnectFail: "无法连接 Ollama",
         OllamaModelNotFound: "模型 {{model}} 未找到，请先执行 ollama pull {{model}}",
+        // ── DeepSeek 专属 ──
+        DeepseekKeyTitle: "DeepSeek API 密钥",
+        DeepseekModelDesc: "选择或输入 DeepSeek 模型名称。",
+        // ── 智谱 AI 专属 ──
+        ZhipuKeyTitle: "智谱 AI 密钥 (API Key)",
+        ZhipuModelDesc: "选择或输入智谱 GLM 系列模型名称。",
+        // ── Kimi 专属 ──
+        MoonshotKeyTitle: "月之暗面 (Kimi) 密钥",
+        MoonshotModelDesc: "选择或输入 Moonshot 系列模型名称。",
+        // ── 通义千问 专属 ──
+        AliyunKeyTitle: "通义千问 (DashScope) 密钥",
+        AliyunModelDesc: "选择或输入 Qwen 系列模型名称。",
+        // ── 百度千帆 专属 ──
+        BaiduKeyTitle: "百度千帆 (Qianfan) 密钥",
+        BaiduModelDesc: "选择或输入百度文心一言 (ERNIE) 系列模型名称。",
+        // ── 字节跳动 专属 ──
+        BytedanceKeyTitle: "字节跳动 (豆包/Ark) 密钥",
+        BytedanceModelDesc: "选择或输入豆包系列模型名称。",
+        // ── Groq 专属 ──
+        GroqKeyTitle: "Groq API 密钥",
+        GroqModelDesc: "选择或输入 Groq 支持的模型 (如 Llama 3)。",
+        // ── SiliconFlow 专属 ──
+        SiliconflowKeyTitle: "SiliconFlow (硅基流动) 密钥",
+        SiliconflowModelDesc: "选择或输入 SiliconFlow 支持的模型 (如 DeepSeek-V3)。",
+        // ── OpenRouter 专属 ──
+        OpenrouterKeyTitle: "OpenRouter API 密钥",
+        OpenrouterModelDesc: "输入 OpenRouter 模型标识符 (如 anthropic/claude-3.5-sonnet)。",
+        // ── DeepInfra 专属 ──
+        DeepinfraKeyTitle: "DeepInfra API 密钥",
+        DeepinfraModelDesc: "选择或输入 DeepInfra 支持的模型 (如 Llama-3.3)。",
+        // ── Mistral 专属 ──
+        MistralKeyTitle: "Mistral AI API 密钥",
+        MistralModelDesc: "选择或输入 Mistral 官方模型 (如 mistral-large-latest)。",
+        // ── MiniMax 专属 ──
+        MinimaxKeyTitle: "MiniMax (海螺 AI) 密钥",
+        MinimaxModelDesc: "选择或输入 MiniMax 模型 (如 abab6.5-chat)。",
+        // ── StepFun 专属 ──
+        StepfunKeyTitle: "阶跃星辰 (StepFun) 密钥",
+        StepfunModelDesc: "选择或输入阶跃星辰模型 (如 step-1-8k)。",
     },
     Share: {
         AuthTitle: "远程仓库",

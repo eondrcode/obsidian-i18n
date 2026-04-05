@@ -1,23 +1,20 @@
 import { pageRule } from '../utils';
 import { DEFAULT_AST_PROMPT_TEMPLATE, DEFAULT_REGEX_PROMPT_TEMPLATE, DEFAULT_THEME_PROMPT_TEMPLATE } from '../ai/prompts';
+import { LLM_PROVIDERS } from '../ai/constants';
 
-export interface OpenAIProfile {
+export interface LLMProfile {
     id: string;
     name: string;
     url: string;
     key: string;
     model: string;
     useCustomPrice: boolean;
-    priceInput: number;
-    priceOutput: number;
+    priceInput: number;     // 人民币 / 每百万 Token
+    priceOutput: number;    // 人民币 / 每百万 Token
 }
 
-export interface GeminiProfile {
-    id: string;
-    name: string;
-    key: string;
-    model: string;
-}
+export interface OpenAIProfile extends LLMProfile {}
+export interface GeminiProfile extends LLMProfile {}
 
 export interface GitHubProfile {
     id: string;
@@ -54,30 +51,128 @@ export interface I18nSettings {
     llmConcurrencyLimit: number;    // LLM 并发请求限制数
     llmTimeout: number;             // LLM 请求超时时间 (毫秒)
 
-
     llmRegexPrompt?: string;        // LLM Regex 自定义提示词模板
     llmAstPrompt?: string;          // LLM AST 自定义提示词模板
     llmThemePrompt?: string;        // LLM Theme 自定义提示词模板
 
-    // OpenAI 专属配置
-    llmOpenaiUrl: string;           // OpenAI API 代理/基础接口地址 (当前激活)
-    llmOpenaiKey: string;           // OpenAI API 密钥 (当前激活)
-    llmOpenaiModel: string;         // 选用的 OpenAI 模型名 (当前激活)
-    llmOpenaiProfiles: OpenAIProfile[]; // 所有 OpenAI 配置方案
-    llmOpenaiActiveProfileId: string;    // 当前激活的 Profile ID
-    llmUseCustomPrice: boolean;     // 是否使用自定义价格估算
-    llmPriceInputCustom: number;    // 自定义输入价格 ($/1M tokens)
-    llmPriceOutputCustom: number;   // 自定义输出价格 ($/1M tokens)
+    // ==========================================
+    // 方案管理与计费配置 (所有服务商)
+    // ==========================================
+    
+    // OpenAI (ID: 1)
+    llmOpenaiProfiles: OpenAIProfile[];
+    llmOpenaiActiveProfileId: string;
+    
+    // Gemini (ID: 2)
+    llmGeminiProfiles: GeminiProfile[];
+    llmGeminiActiveProfileId: string;
 
-    // Gemini 专属配置
-    llmGeminiKey: string;                   // Gemini API Key
-    llmGeminiModel: string;                 // 选用的 Gemini 模型名
-    llmGeminiProfiles: GeminiProfile[];     // Gemini 配置方案列表
-    llmGeminiActiveProfileId: string;       // 当前激活的 Gemini Profile ID
+    // Ollama (ID: 3)
+    llmOllamaProfiles: LLMProfile[];
+    llmOllamaActiveProfileId: string;
 
-    // Ollama 专属配置
-    llmOllamaUrl: string;                   // Ollama 端点地址 (默认 http://localhost:11434)
-    llmOllamaModel: string;                 // 选用的 Ollama 模型名
+    // DeepSeek (ID: 4)
+    llmDeepseekProfiles: LLMProfile[];
+    llmDeepseekActiveProfileId: string;
+
+    // 智谱 AI (ID: 5)
+    llmZhipuProfiles: LLMProfile[];
+    llmZhipuActiveProfileId: string;
+
+    // 月之暗面 (ID: 6)
+    llmMoonshotProfiles: LLMProfile[];
+    llmMoonshotActiveProfileId: string;
+
+    // 通义千问 (ID: 7)
+    llmAliyunProfiles: LLMProfile[];
+    llmAliyunActiveProfileId: string;
+
+    // 百度千帆 (ID: 8)
+    llmBaiduProfiles: LLMProfile[];
+    llmBaiduActiveProfileId: string;
+
+    // 字节跳动 (ID: 9)
+    llmBytedanceProfiles: LLMProfile[];
+    llmBytedanceActiveProfileId: string;
+
+    // Groq (ID: 10)
+    llmGroqProfiles: LLMProfile[];
+    llmGroqActiveProfileId: string;
+
+    // SiliconFlow (ID: 11)
+    llmSiliconflowProfiles: LLMProfile[];
+    llmSiliconflowActiveProfileId: string;
+
+    // OpenRouter (ID: 12)
+    llmOpenrouterProfiles: LLMProfile[];
+    llmOpenrouterActiveProfileId: string;
+
+    // DeepInfra (ID: 13)
+    llmDeepinfraProfiles: LLMProfile[];
+    llmDeepinfraActiveProfileId: string;
+
+    // Mistral AI (ID: 14)
+    llmMistralProfiles: LLMProfile[];
+    llmMistralActiveProfileId: string;
+
+    // MiniMax (ID: 15)
+    llmMinimaxProfiles: LLMProfile[];
+    llmMinimaxActiveProfileId: string;
+
+    // StepFun (ID: 16)
+    llmStepfunProfiles: LLMProfile[];
+    llmStepfunActiveProfileId: string;
+
+    llmUseCustomPrice: boolean;
+    llmPriceInputCustom: number;
+    llmPriceOutputCustom: number;
+
+    // 为了向前兼容保留的单字段配置
+    llmOpenaiUrl: string;
+    llmOpenaiKey: string;
+    llmOpenaiModel: string;
+    llmGeminiKey: string;
+    llmGeminiModel: string;
+    llmOllamaUrl: string;
+    llmOllamaModel: string;
+    llmDeepseekKey: string;
+    llmDeepseekModel: string;
+    llmZhipuKey: string;
+    llmZhipuModel: string;
+    llmMoonshotKey: string;
+    llmMoonshotModel: string;
+    llmAliyunKey: string;
+    llmAliyunModel: string;
+    llmBaiduKey: string;
+    llmBaiduModel: string;
+    llmBytedanceKey: string;
+    llmBytedanceModel: string;
+    llmGroqKey: string;
+    llmGroqModel: string;
+
+    // SiliconFlow 专属配置
+    llmSiliconflowKey: string;
+    llmSiliconflowModel: string;
+
+    // OpenRouter 专属配置
+    llmOpenrouterKey: string;
+    llmOpenrouterModel: string;
+
+    // DeepInfra 专属配置
+    llmDeepinfraKey: string;
+    llmDeepinfraModel: string;
+
+    // Mistral AI 专属配置
+    llmMistralKey: string;
+    llmMistralModel: string;
+
+    // MiniMax 专属配置
+    llmMinimaxKey: string;
+    llmMinimaxModel: string;
+
+    // StepFun 专属配置
+    llmStepfunKey: string;
+    llmStepfunModel: string;
 
     // ==============================
     // 沉浸式翻译配置 (IMT)
@@ -179,9 +274,18 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // OpenAI 专属配置
     llmOpenaiUrl: '',
     llmOpenaiKey: '',
-    llmOpenaiModel: '',
-    llmOpenaiProfiles: [],
-    llmOpenaiActiveProfileId: '',
+    llmOpenaiModel: LLM_PROVIDERS[1].defaultModel,
+    llmOpenaiProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: '',
+        key: '',
+        model: LLM_PROVIDERS[1].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmOpenaiActiveProfileId: 'default',
     llmUseCustomPrice: true,
     llmPriceInputCustom: 0,
     llmPriceOutputCustom: 0,
@@ -189,12 +293,227 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // Gemini 专属配置
     llmGeminiKey: '',
     llmGeminiModel: 'gemini-2.0-flash',
-    llmGeminiProfiles: [],
-    llmGeminiActiveProfileId: '',
+    llmGeminiProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: '',
+        key: '',
+        model: 'gemini-2.0-flash',
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmGeminiActiveProfileId: 'default',
 
     // Ollama 专属配置
     llmOllamaUrl: 'http://localhost:11434',
     llmOllamaModel: '',
+    llmOllamaProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: 'http://localhost:11434',
+        key: '',
+        model: '',
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmOllamaActiveProfileId: 'default',
+
+    // DeepSeek 专属配置
+    llmDeepseekKey: '',
+    llmDeepseekModel: LLM_PROVIDERS[4].defaultModel,
+    llmDeepseekProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[4].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[4].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmDeepseekActiveProfileId: 'default',
+
+    // 智谱 AI 专属配置
+    llmZhipuKey: '',
+    llmZhipuModel: LLM_PROVIDERS[5].defaultModel,
+    llmZhipuProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[5].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[5].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmZhipuActiveProfileId: 'default',
+
+    // 月之暗面 (Moonshot/Kimi) 专属配置
+    llmMoonshotKey: '',
+    llmMoonshotModel: LLM_PROVIDERS[6].defaultModel,
+    llmMoonshotProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[6].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[6].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmMoonshotActiveProfileId: 'default',
+
+    // 通义千问 (Aliyun DashScope) 专属配置
+    llmAliyunKey: '',
+    llmAliyunModel: LLM_PROVIDERS[7].defaultModel,
+    llmAliyunProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[7].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[7].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmAliyunActiveProfileId: 'default',
+
+    // 百度千帆 (Baidu Qianfan) 专属配置
+    llmBaiduKey: '',
+    llmBaiduModel: LLM_PROVIDERS[8].defaultModel,
+    llmBaiduProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[8].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[8].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmBaiduActiveProfileId: 'default',
+
+    // 字节跳动 (ByteDance Ark/Doubao) 专属配置
+    llmBytedanceKey: '',
+    llmBytedanceModel: LLM_PROVIDERS[9].defaultModel,
+    llmBytedanceProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[9].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[9].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmBytedanceActiveProfileId: 'default',
+
+    // Groq 专属配置
+    llmGroqKey: '',
+    llmGroqModel: LLM_PROVIDERS[10].defaultModel,
+    llmGroqProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[10].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[10].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmGroqActiveProfileId: 'default',
+
+    // SiliconFlow 专属配置
+    llmSiliconflowKey: '',
+    llmSiliconflowModel: LLM_PROVIDERS[11].defaultModel,
+    llmSiliconflowProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[11].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[11].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmSiliconflowActiveProfileId: 'default',
+
+    // OpenRouter 专属配置
+    llmOpenrouterKey: '',
+    llmOpenrouterModel: LLM_PROVIDERS[12].defaultModel,
+    llmOpenrouterProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[12].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[12].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmOpenrouterActiveProfileId: 'default',
+
+    // DeepInfra 专属配置
+    llmDeepinfraKey: '',
+    llmDeepinfraModel: LLM_PROVIDERS[13].defaultModel,
+    llmDeepinfraProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[13].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[13].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmDeepinfraActiveProfileId: 'default',
+
+    // Mistral AI 专属配置
+    llmMistralKey: '',
+    llmMistralModel: LLM_PROVIDERS[14].defaultModel,
+    llmMistralProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[14].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[14].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmMistralActiveProfileId: 'default',
+
+    // MiniMax 专属配置
+    llmMinimaxKey: '',
+    llmMinimaxModel: LLM_PROVIDERS[15].defaultModel,
+    llmMinimaxProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[15].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[15].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmMinimaxActiveProfileId: 'default',
+
+    // StepFun 专属配置
+    llmStepfunKey: '',
+    llmStepfunModel: LLM_PROVIDERS[16].defaultModel,
+    llmStepfunProfiles: [{
+        id: 'default',
+        name: 'Default',
+        url: LLM_PROVIDERS[16].baseUrl || '',
+        key: '',
+        model: LLM_PROVIDERS[16].defaultModel,
+        useCustomPrice: false,
+        priceInput: 0,
+        priceOutput: 0
+    }],
+    llmStepfunActiveProfileId: 'default',
 
     // ==============================
     // 沉浸式翻译配置 (IMT)

@@ -31,6 +31,17 @@ export default class I18nLLMOllama extends BaseSetting {
                 })
             );
 
+        // 官网链接
+        new Setting(this.containerEl)
+            .setName(t('Settings.Ai.HomepageBtn'))
+            .setDesc('https://ollama.com/')
+            .addButton(btn => {
+                btn.setButtonText(t('Settings.Ai.HomepageBtn'))
+                    .onClick(() => {
+                        window.open('https://ollama.com/');
+                    });
+            });
+
         // 模型选择
         const modelSetting = new Setting(this.containerEl)
             .setName(t('Settings.Ai.ModelTitle'))

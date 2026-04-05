@@ -50,6 +50,10 @@ export default class I18nLLMGemini extends BaseSetting {
                         name: `${t('Settings.Ai.ProfileAddBtn')} ${this.settings.llmGeminiProfiles.length + 1}`,
                         key: '',
                         model: 'gemini-2.0-flash',
+                        url: "",
+                        useCustomPrice: false,
+                        priceInput: 0,
+                        priceOutput: 0
                     };
                     this.settings.llmGeminiProfiles.push(newProfile);
                     this.settings.llmGeminiActiveProfileId = id;
@@ -121,6 +125,17 @@ export default class I18nLLMGemini extends BaseSetting {
                         await this.i18n.saveSettings();
                     });
                 text.inputEl.setAttribute('type', 'password');
+            });
+
+        // 官网链接
+        new Setting(this.containerEl)
+            .setName(t('Settings.Ai.HomepageBtn'))
+            .setDesc('https://aistudio.google.com/')
+            .addButton(btn => {
+                btn.setButtonText(t('Settings.Ai.HomepageBtn'))
+                    .onClick(() => {
+                        window.open('https://aistudio.google.com/');
+                    });
             });
 
         // 模型选择

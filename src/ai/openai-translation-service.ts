@@ -1,4 +1,4 @@
-﻿
+
 import { requestUrl } from "obsidian";
 import OpenAI from "openai";
 import { normalizeOpenAIUrl } from "../utils/ai/url-helper";
@@ -7,6 +7,7 @@ import { ThemeTranslationItem } from "../views/theme_editor/types";
 import z from "zod";
 import { useGlobalStoreInstance } from "~/utils";
 import { BaseProvider } from "./base-provider";
+import { LLM_PROVIDERS } from "./constants";
 import {
     DEFAULT_REGEX_PROMPT_TEMPLATE, generateRegexSystemPrompt,
     DEFAULT_AST_PROMPT_TEMPLATE, generateAstSystemPrompt,
@@ -57,42 +58,45 @@ export class OpenAITranslationService extends BaseProvider {
      */
     private getOpenAIClient(): OpenAI {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
-        const rawBaseURL = normalizeOpenAIUrl(settings.llmOpenaiUrl);
-        const baseURL = rawBaseURL ? `${rawBaseURL}/v1` : undefined;
+        const activeProfile = this.getActiveProfile();
+
+        let baseURL: string | undefined = undefined;
+        let apiKey: string = "";
+
+        if (activeProfile) {
+            apiKey = activeProfile.key;
+            const rawUrl = normalizeOpenAIUrl(activeProfile.url || LLM_PROVIDERS[settings.llmApi]?.baseUrl || "");
+            baseURL = rawUrl ? `${rawUrl}/v1` : undefined;
+        } else {
+            // 回退到以前的单字段配置 (仅为了极致兼容)
+            const config = LLM_PROVIDERS[settings.llmApi];
+            if (config) {
+                apiKey = (settings as any)[config.keyField] as string;
+                baseURL = config.baseUrl;
+            }
+        }
 
         return new OpenAI({
             baseURL: baseURL,
-            apiKey: settings.llmOpenaiKey,
+            apiKey: apiKey,
             dangerouslyAllowBrowser: true,
             fetch: async (url, options) => {
-                // 转换 Headers 为普通对象，确保 requestUrl 能识别
+                // ... (Headers handling remains same)
                 const headers: Record<string, string> = {};
                 if (options?.headers) {
                     if (options.headers instanceof Headers) {
-                        options.headers.forEach((value, key) => {
-                            headers[key] = value;
-                        });
+                        options.headers.forEach((value, key) => { headers[key] = value; });
                     } else if (Array.isArray(options.headers)) {
-                        options.headers.forEach(([key, value]) => {
-                            headers[key] = value;
-                        });
+                        options.headers.forEach(([key, value]) => { headers[key] = value; });
                     } else {
                         Object.assign(headers, options.headers as Record<string, string>);
                     }
                 }
 
-                // 创建一个可取消的包装，因为 requestUrl 不支持 signal
                 const signal = options?.signal;
-
                 return new Promise((resolve, reject) => {
-                    const onAbort = () => {
-                        reject(new Error('AbortError'));
-                    };
-
-                    if (signal?.aborted) {
-                        return onAbort();
-                    }
-
+                    const onAbort = () => reject(new Error('AbortError'));
+                    if (signal?.aborted) return onAbort();
                     signal?.addEventListener('abort', onAbort);
 
                     requestUrl({
@@ -121,9 +125,18 @@ export class OpenAITranslationService extends BaseProvider {
         });
     }
 
-    /** 覆写：返回当前 OpenAI 模型名 */
+    /** 覆写：返回当前服务对应的模型名 */
     protected override getModelName(): string {
-        return useGlobalStoreInstance.getState().i18n.settings.llmOpenaiModel || 'gpt-4o-mini';
+        const activeProfile = this.getActiveProfile();
+        if (activeProfile?.model) return activeProfile.model;
+
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        const config = LLM_PROVIDERS[settings.llmApi];
+        if (config) {
+            const model = (settings as any)[config.modelField] as string;
+            return model || config.defaultModel;
+        }
+        return 'gpt-4o-mini';
     }
 
     /**
@@ -171,14 +184,12 @@ export class OpenAITranslationService extends BaseProvider {
         let lastError: any = null;
 
         while (attempt <= maxRetries) {
-            // 创建一个内部的 AbortController 用于同时处理手动取消和超时
             const timeoutController = new AbortController();
             const timeoutMs = settings.llmTimeout || 60000;
             const timeoutId = setTimeout(() => {
                 timeoutController.abort();
             }, timeoutMs);
 
-            // 监听外部 signal 的取消并同步到内部 controller
             const abortHandler = () => timeoutController.abort();
             if (signal) {
                 signal.addEventListener('abort', abortHandler);
@@ -190,7 +201,7 @@ export class OpenAITranslationService extends BaseProvider {
                 const openai = this.getOpenAIClient();
                 const completion = await openai.chat.completions.create({
                     messages: messages as any,
-                    model: settings.llmOpenaiModel,
+                    model: this.getModelName(),
                     temperature: 0.3,
                     response_format: { type: settings.llmResponseFormat as any },
                 }, { signal: timeoutController.signal });

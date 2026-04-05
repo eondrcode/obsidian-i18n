@@ -9,13 +9,26 @@ import { RegexItem, AstItem } from '../views/plugin_editor/types';
 import { ThemeTranslationItem } from '../views/theme_editor/types';
 
 /** Provider 类型枚举 */
-export type ProviderType = 'openai' | 'gemini' | 'ollama';
+export type ProviderType = 'openai' | 'gemini' | 'ollama' | 'deepseek' | 'zhipu' | 'moonshot' | 'aliyun' | 'baidu' | 'bytedance' | 'groq' | 'siliconflow' | 'openrouter' | 'deepinfra' | 'mistral' | 'minimax' | 'stepfun';
 
 /** Provider 枚举值映射（与 settings.llmApi 对应的数字） */
 export const PROVIDER_ID_MAP: Record<number, ProviderType> = {
     1: 'openai',
     2: 'gemini',
     3: 'ollama',
+    4: 'deepseek',
+    5: 'zhipu',
+    6: 'moonshot',
+    7: 'aliyun',
+    8: 'baidu',
+    9: 'bytedance',
+    10: 'groq',
+    11: 'siliconflow',
+    12: 'openrouter',
+    13: 'deepinfra',
+    14: 'mistral',
+    15: 'minimax',
+    16: 'stepfun',
 };
 
 /** 批次完成回调 (Regex) */

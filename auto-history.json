@@ -1,5 +1,19 @@
 [
   {
+    "id": "1775357891721",
+    "time": 1775357891721,
+    "trigger": "manual",
+    "summary": {
+      "total": 0,
+      "success": 0,
+      "error": 0,
+      "skipped": 0,
+      "discovered": 0,
+      "upToDate": 0
+    },
+    "details": "[]"
+  },
+  {
     "id": "1775287612564",
     "time": 1775287612564,
     "trigger": "discovery",
@@ -675,20 +689,6 @@
     "id": "1775284306317",
     "time": 1775284306317,
     "trigger": "discovery",
-    "summary": {
-      "total": 0,
-      "success": 0,
-      "error": 0,
-      "skipped": 0,
-      "discovered": 0,
-      "upToDate": 0
-    },
-    "details": "[]"
-  },
-  {
-    "id": "1775284242186",
-    "time": 1775284242186,
-    "trigger": "manual",
     "summary": {
       "total": 0,
       "success": 0,
