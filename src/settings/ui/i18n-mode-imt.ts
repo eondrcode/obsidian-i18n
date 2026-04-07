@@ -153,11 +153,11 @@ export default class I18nModIMT extends BaseSetting {
         }));
         injectedCssTextArea.addTextArea(cb => {
             cb.setValue(this.settings.imtPagerule.injectedCss ? (Array.isArray(this.settings.imtPagerule.injectedCss) ? this.settings.imtPagerule.injectedCss.join('\n') : this.settings.imtPagerule.injectedCss) : '')
-              .onChange(async (v) => {
-                  this.settings.imtPagerule.injectedCss = v;
-                  await this.i18n.saveSettings();
-              })
-              .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); };
+                .onChange(async (v) => {
+                    this.settings.imtPagerule.injectedCss = v;
+                    await this.i18n.saveSettings();
+                })
+                .inputEl.onblur = () => { new Notice(t('Settings.Immersive.RestartNotice'), 5000); };
             cb.inputEl.setAttr("rows", 4);
         });
     }

@@ -2,6 +2,7 @@ import BaseSetting from "../base-setting";
 import { Setting, Notice, requestUrl, setIcon } from "obsidian";
 import { SUPPORTED_LANGUAGES } from '@/src/constants/languages';
 import { t } from "src/locales";
+import { DEFAULT_SETTINGS } from "../data";
 
 export default class I18nBasis extends BaseSetting {
     main(): void {
@@ -162,17 +163,38 @@ export default class I18nBasis extends BaseSetting {
             );
 
         // 4. 自动化
-        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.AutoHeader'));
+        // new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.AutoHeader'));
+
+        // new Setting(this.containerEl)
+        //     .setName(t('Settings.Basis.AutoTrustedReposTitle'))
+        //     .setDesc(t('Settings.Basis.AutoTrustedReposDesc'))
+        //     .addTextArea(cb => cb
+        //         .setPlaceholder(t('Settings.Basis.AutoTrustedReposPlaceholder'))
+        //         .setValue(this.settings.autoTrustedRepos.join('\n'))
+        //         .onChange(async (value) => {
+        //             this.settings.autoTrustedRepos = value.split('\n').map(v => v.trim()).filter(v => v.length > 0);
+        //             await this.i18n.saveSettings();
+        //         })
+        //     );
+
+        // 6. 重置
+        new Setting(this.containerEl).setHeading().setName(t('Settings.Basis.ResetHeader'));
 
         new Setting(this.containerEl)
-            .setName(t('Settings.Basis.AutoTrustedReposTitle'))
-            .setDesc(t('Settings.Basis.AutoTrustedReposDesc'))
-            .addTextArea(cb => cb
-                .setPlaceholder(t('Settings.Basis.AutoTrustedReposPlaceholder'))
-                .setValue(this.settings.autoTrustedRepos.join('\n'))
-                .onChange(async (value) => {
-                    this.settings.autoTrustedRepos = value.split('\n').map(v => v.trim()).filter(v => v.length > 0);
-                    await this.i18n.saveSettings();
+            .setName(t('Settings.Basis.ResetTitle'))
+            .setDesc(t('Settings.Basis.ResetDesc'))
+            .addButton(cb => cb
+                .setButtonText(t('Settings.Basis.ResetBtn'))
+                .setWarning()
+                .onClick(async () => {
+                    if (window.confirm(t('Settings.Basis.ResetConfirm'))) {
+                        // 重置配置 (深拷贝默认配置，避免引用污染)
+                        Object.assign(this.settings, JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+                        await this.i18n.saveSettings();
+                        new Notice(t('Settings.Basis.ResetSuccess'));
+                        // 强制重新渲染整个设置面板
+                        this.settingTab.display();
+                    }
                 })
             );
 
@@ -226,5 +248,7 @@ export default class I18nBasis extends BaseSetting {
         btn.onclick = () => {
             window.open('obsidian://show-plugin?id=better-plugins-manager');
         };
+
+
     }
 }

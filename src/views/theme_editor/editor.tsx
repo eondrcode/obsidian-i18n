@@ -230,6 +230,14 @@ const ReactThemeEditor: React.FC = () => {
     const incrementalExtract = useCallback(async () => {
         try {
             const { themeName, themeDir } = useThemeEditorStore.getState();
+
+            // 安全检查：如果已应用，禁止增量提取
+            const isApplied = !!i18n.stateManager.getThemeState(themeName)?.isApplied;
+            if (isApplied) {
+                notice.error(t('Editor.Actions.IncrementalExtractDisabledTip'));
+                return;
+            }
+
             const themeCssPath = path.join(themeDir, 'theme.css');
 
             if (!fs.existsSync(themeCssPath)) {

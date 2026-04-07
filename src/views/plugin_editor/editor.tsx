@@ -222,6 +222,13 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
             const { metadata } = useRegexStore.getState();
             if (!metadata) return;
 
+            // 安全检查：如果已应用，禁止增量提取
+            const isApplied = !!i18n.stateManager.getPluginState(metadata.plugin)?.isApplied;
+            if (isApplied) {
+                notice.error(t('Editor.Actions.IncrementalExtractDisabledTip'));
+                return;
+            }
+
             const pluginId = metadata.plugin;
             const currentFile = useRegexStore.getState().currentFile;
             // @ts-ignore
@@ -261,6 +268,13 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
         try {
             const { metadata } = useRegexStore.getState();
             if (!metadata) return;
+
+            // 安全检查：如果已应用，禁止增量提取
+            const isApplied = !!i18n.stateManager.getPluginState(metadata.plugin)?.isApplied;
+            if (isApplied) {
+                notice.error(t('Editor.Actions.IncrementalExtractDisabledTip'));
+                return;
+            }
 
             const pluginId = metadata.plugin;
             const currentFile = useRegexStore.getState().currentFile;

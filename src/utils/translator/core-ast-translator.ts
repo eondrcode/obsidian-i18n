@@ -4,6 +4,7 @@ import traverse from '@babel/traverse';
 import { generate } from "@babel/generator";
 import * as t from '@babel/types';
 import { PluginTranslationV1Ast } from '~/types';
+import { I18nSettings } from '../../settings/data';
 
 // ====================================================================================================
 //                                      Configuration (白名单配置)
@@ -13,25 +14,33 @@ import { PluginTranslationV1Ast } from '~/types';
  * 严格白名单配置
  * 只有在以下上下文中出现的字符串才会被考虑提取
  */
-
+import { AST_DEFAULT_CONFIG, AST_DEFAULT_RULES } from './config';
 
 export class AstTranslator {
-    private settings: any; // I18nSettings
-    private rejectPatterns: RegExp[] = [];
-    private validPatterns: RegExp[] = [];
+    private settings: I18nSettings;
+    private config: any;
+    private contentRules: any;
 
-    constructor(settings: any) {
+    constructor(settings: I18nSettings) {
         this.settings = settings;
         this.initPatterns();
     }
 
     private initPatterns() {
-        if (this.settings.astRejectRe) {
-            this.rejectPatterns = this.settings.astRejectRe.map((s: string) => new RegExp(s, 'i'));
-        }
-        if (this.settings.astValidRe) {
-            this.validPatterns = this.settings.astValidRe.map((s: string) => new RegExp(s, 'i'));
-        }
+        this.config = {
+            assignments: this.settings?.astAssignments || AST_DEFAULT_CONFIG.assignments,
+            functions: this.settings?.astFunctions || AST_DEFAULT_CONFIG.functions,
+            keys: this.settings?.astKeys || AST_DEFAULT_CONFIG.keys,
+        };
+
+        this.contentRules = {
+            REJECT_PATTERNS: (this.settings?.astRejectRe || []).length > 0
+                ? this.settings!.astRejectRe.map((re: string) => new RegExp(re))
+                : AST_DEFAULT_RULES.REJECT_PATTERNS,
+            VALID_PATTERNS: (this.settings?.astValidRe || []).length > 0
+                ? this.settings!.astValidRe.map((re: string) => new RegExp(re))
+                : AST_DEFAULT_RULES.VALID_PATTERNS,
+        };
     }
 
     // ====================================================================================================
@@ -154,16 +163,21 @@ export class AstTranslator {
         if (text.length < 2) return false;
 
         // 1. 拒绝匹配任何 REJECT 模式
-        if (this.rejectPatterns.some(regex => regex.test(text))) {
+        if (this.contentRules.REJECT_PATTERNS.some((regex: RegExp) => regex.test(text))) {
             return false;
         }
 
-        // 2. 必须满足至少一个 VALID 特征 (空格/中文/标点)
-        if (this.validPatterns.some(regex => regex.test(text))) {
+        // 2. 如果满足 VALID 特征 (空格/中文/标点/首字母大写等)，直接允许
+        if (this.contentRules.VALID_PATTERNS.some((regex: RegExp) => regex.test(text))) {
             return true;
         }
 
-        // 3. 默认拒绝 (宁可少提，不可错提)
+        // 3. 兜底策略：如果是纯英文单词 (不含特殊符号) 且超过一定长度，通常也是合法的 UI 文本
+        if (/^[A-Za-z]{2,}$/.test(text)) {
+            return true;
+        }
+
+        // 4. 默认拒绝 (对无特征且非纯单词的内容保持谨慎)
         return false;
     }
 
@@ -181,7 +195,7 @@ export class AstTranslator {
             VariableDeclarator: (path) => {
                 const node = path.node;
                 const name = t.isIdentifier(node.id) ? node.id.name : null;
-                if (name && this.settings.astAssignments.includes(name) && this.isStrNode(node.init)) {
+                if (name && this.config.assignments.includes(name) && this.isStrNode(node.init)) {
                     callback('VariableDeclarator', name, node.init);
                 }
             },
@@ -189,7 +203,7 @@ export class AstTranslator {
             AssignmentExpression: (path) => {
                 const node = path.node;
                 const name = this.getAssignName(node.left);
-                if (name && this.settings.astAssignments.includes(name) && this.isStrNode(node.right)) {
+                if (name && this.config.assignments.includes(name) && this.isStrNode(node.right)) {
                     callback('AssignmentExpression', name, node.right);
                 }
             },
@@ -197,7 +211,7 @@ export class AstTranslator {
             ObjectProperty: (path) => {
                 const node = path.node;
                 const name = this.getObjKeyName(node.key);
-                if (name && this.settings.astKeys.includes(name) && this.isStrNode(node.value)) {
+                if (name && this.config.keys.includes(name) && this.isStrNode(node.value)) {
                     callback('ObjectProperty', name, node.value);
                 }
             },
@@ -205,10 +219,20 @@ export class AstTranslator {
             CallExpression: (path) => {
                 const node = path.node;
                 const name = this.getCallName(node.callee);
-                if (name && this.settings.astFunctions.includes(name)) {
+                if (name && this.config.functions.includes(name)) {
                     node.arguments.forEach(arg => {
                         if (this.isStrNode(arg)) {
                             callback('CallExpression', name, arg);
+                        } else if (t.isObjectExpression(arg)) {
+                            // 深度提取：提取白名单函数参数对象中的所有字符串值
+                            arg.properties.forEach(prop => {
+                                if (t.isObjectProperty(prop)) {
+                                    const propName = this.getObjKeyName(prop.key) || 'prop';
+                                    if (this.isStrNode(prop.value)) {
+                                        callback('ObjectProperty', propName, prop.value);
+                                    }
+                                }
+                            });
                         }
                     });
                 }
@@ -217,10 +241,20 @@ export class AstTranslator {
             NewExpression: (path) => {
                 const node = path.node;
                 const name = this.getCallName(node.callee);
-                if (name && this.settings.astFunctions.includes(name)) {
+                if (name && this.config.functions.includes(name)) {
                     node.arguments.forEach(arg => {
                         if (this.isStrNode(arg)) {
                             callback('NewExpression', name, arg);
+                        } else if (t.isObjectExpression(arg)) {
+                            // 深度提取
+                            arg.properties.forEach(prop => {
+                                if (t.isObjectProperty(prop)) {
+                                    const propName = this.getObjKeyName(prop.key) || 'prop';
+                                    if (this.isStrNode(prop.value)) {
+                                        callback('ObjectProperty', propName, prop.value);
+                                    }
+                                }
+                            });
                         }
                     });
                 }

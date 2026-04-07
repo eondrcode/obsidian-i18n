@@ -292,11 +292,11 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
                         <div className="flex items-center rounded-none border border-muted-foreground/20 bg-background shadow-sm h-9">
                             <Button variant="ghost" size="sm" onClick={toggleSelectAll} className="gap-1.5 h-9 rounded-none px-3 border-r border-muted-foreground/20 hover:bg-muted/50">
                                 <CheckSquare className={cn("w-4 h-4", allSources.length > 0 && selectedIds.size === allSources.length ? "text-primary" : "text-muted-foreground/70")} />
-                                <span className={cn("hidden lg:inline text-[13px] font-bold", allSources.length > 0 && selectedIds.size === allSources.length ? "text-primary" : "text-muted-foreground/90")}>{t('Manager.Sources.Actions.SelectAll')}</span>
+                                <span className={cn("hidden lg:inline text-[13px]", allSources.length > 0 && selectedIds.size === allSources.length ? "text-primary" : "text-muted-foreground/90")}>{t('Manager.Sources.Actions.SelectAll')}</span>
                             </Button>
                             <Button variant="ghost" size="sm" onClick={handleSelectUninstalled} className="gap-1.5 h-9 rounded-none px-3 hover:bg-destructive/10 hover:text-destructive group" title={t('Manager.Sources.Actions.SelectUninstalled')}>
                                 <AlertCircle className="w-4 h-4 text-destructive/80 group-hover:text-destructive" />
-                                <span className="hidden lg:inline text-[13px] font-bold text-destructive/90 group-hover:text-destructive">{t('Manager.Sources.Actions.SelectUninstalled')}</span>
+                                <span className="hidden lg:inline text-[13px] text-destructive/90 group-hover:text-destructive">{t('Manager.Sources.Actions.SelectUninstalled')}</span>
                             </Button>
                         </div>
 
@@ -304,7 +304,7 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
                         <div className="flex items-center rounded-none border border-muted-foreground/20 bg-background shadow-sm h-9">
                             <Button variant="ghost" size="sm" onClick={handleImport} className="gap-1.5 h-9 rounded-none px-3 border-r border-muted-foreground/20 hover:bg-primary/5 hover:text-primary group">
                                 <Upload className="w-4 h-4 text-muted-foreground/70 group-hover:text-primary" />
-                                <span className="text-[13px] font-bold text-muted-foreground/90 hidden lg:inline group-hover:text-primary">{t('Manager.Sources.Actions.Import')}</span>
+                                <span className="text-[13px] text-muted-foreground/90 hidden lg:inline group-hover:text-primary">{t('Manager.Sources.Actions.Import')}</span>
                             </Button>
                             <Button
                                 variant="ghost"
@@ -314,7 +314,7 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
                                 className="gap-1.5 h-9 rounded-none px-3 hover:bg-primary/5 hover:text-primary group"
                             >
                                 <Download className="w-4 h-4 text-muted-foreground/70 group-hover:text-primary" />
-                                <span className="text-[13px] font-bold text-muted-foreground/90 hidden lg:inline group-hover:text-primary">{t('Manager.Sources.Actions.Export')}</span>
+                                <span className="text-[13px] text-muted-foreground/90 hidden lg:inline group-hover:text-primary">{t('Manager.Sources.Actions.Export')}</span>
                             </Button>
                         </div>
 
@@ -324,7 +324,7 @@ export const TranslationManagerPanel: React.FC<TranslationManagerPanelProps> = (
                             size="sm"
                             onClick={handleBatchDelete}
                             disabled={selectedIds.size === 0}
-                            className="gap-1.5 h-9 rounded-none shadow-sm px-3 font-bold text-[13px]"
+                            className="gap-1.5 h-9 rounded-none shadow-sm px-3 text-[13px]"
                         >
                             <Trash2 className="w-4 h-4" />
                             <span className="hidden lg:inline">{t('Manager.Sources.Actions.BatchDelete')}</span>

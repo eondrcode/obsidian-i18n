@@ -18,7 +18,7 @@ export default class I18nLLMGeneric extends BaseSetting {
 
         this.profileUI();
         this.configUI();
-        
+
         // OpenAI 专属配置：响应格式
         if (providerId === 1) {
             this.openaiSpecialUI();
@@ -99,23 +99,7 @@ export default class I18nLLMGeneric extends BaseSetting {
 
         const activeProfile = this.activeProfile;
         if (activeProfile) {
-            profileSetting.addExtraButton(btn => {
-                btn.setIcon('pencil')
-                    .setTooltip(t('Settings.Ai.ProfileRenameBtn'))
-                    .onClick(() => {
-                        const renameSetting = new Setting(container)
-                            .setName(t('Settings.Ai.ProfileRenameNotice'))
-                            .addText(text => {
-                                text.setValue(activeProfile.name)
-                                    .onChange(async (val) => {
-                                        activeProfile.name = val.trim();
-                                        await this.i18n.saveSettings();
-                                    });
-                                text.inputEl.addEventListener('blur', () => this.settingTab.llmDisplay());
-                            });
-                        renameSetting.controlEl.querySelector('input')?.focus();
-                    });
-            });
+            // Removed rename button logic as requested (now permanent in configUI)
 
             if (profiles.length > 1) {
                 profileSetting.addExtraButton(btn => {
@@ -140,6 +124,26 @@ export default class I18nLLMGeneric extends BaseSetting {
         if (!activeProfile) return;
 
         const { labelKey, models, defaultModel, id: providerId } = this.config;
+
+        // Profile Name (方案名称) - 常驻显示
+        new Setting(this.containerEl)
+            .setName(t('Settings.Ai.ProfileNameTitle'))
+            .setDesc(t('Settings.Ai.ProfileNameDesc'))
+            .addText(text => {
+                text.setValue(activeProfile.name)
+                    .setPlaceholder(t('Settings.Ai.ProfileNamePlaceholder'))
+                    .onChange(async (val) => {
+                        activeProfile.name = val.trim();
+                        await this.i18n.saveSettings();
+                    });
+                // 失去焦点或按回车时刷新 UI 以同步下拉框名称
+                text.inputEl.addEventListener('blur', () => this.settingTab.llmDisplay());
+                text.inputEl.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).blur();
+                    }
+                });
+            });
 
         // Base URL
         new Setting(this.containerEl)
@@ -212,14 +216,14 @@ export default class I18nLLMGeneric extends BaseSetting {
 
         modelSetting.addDropdown(async dropdown => {
             dropdown.addOption('', t('Settings.Ai.ModelSelectPlaceholder'));
-            
+
             let finalModels = models;
             if (providerId === 3) {
                 try {
                     finalModels = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
                 } catch { /* ignore */ }
             }
-            
+
             finalModels.forEach(m => dropdown.addOption(m, m));
             dropdown.setValue(activeProfile.model);
             dropdown.onChange(async (value) => {

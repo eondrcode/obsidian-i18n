@@ -2,6 +2,8 @@ import fs from 'fs';
 import { PluginTranslationV1Regex } from '~/types';
 import { I18nSettings } from 'src/settings/data';
 
+import { REGEX_DEFAULT_CONFIG } from './config';
+
 export interface RegexValidationResult {
     success: boolean;
     message: string;
@@ -25,14 +27,23 @@ export class RegexTranslator {
 
     private initPatterns() {
         // 初始化核心匹配正则
-        const regexps = [...(this.settings.reDatas || [])];
+        const regexps = (this.settings.reDatas && this.settings.reDatas.length > 0)
+            ? this.settings.reDatas
+            : REGEX_DEFAULT_CONFIG.patterns;
+        
         this.patterns = regexps.filter(p => p !== '').map(p => new RegExp(p, this.settings.reFlags || 'gs'));
 
         // 初始化过滤正则 (排除型)
-        this.rejectPatterns = (this.settings.reRejectRe || []).map(p => new RegExp(p));
+        const rejectRes = (this.settings.reRejectRe && this.settings.reRejectRe.length > 0)
+            ? this.settings.reRejectRe
+            : REGEX_DEFAULT_CONFIG.rejectPatterns;
+        this.rejectPatterns = rejectRes.map(p => new RegExp(p));
 
         // 初始化验证正则 (有效型)
-        this.validPatterns = (this.settings.reValidRe || []).map(p => new RegExp(p));
+        const validRes = (this.settings.reValidRe && this.settings.reValidRe.length > 0)
+            ? this.settings.reValidRe
+            : REGEX_DEFAULT_CONFIG.validPatterns;
+        this.validPatterns = validRes.map(p => new RegExp(p));
     }
 
     private isValidText(text: string): boolean {

@@ -25,12 +25,14 @@ export class OllamaTranslationService extends BaseProvider {
 
     /** 覆写：返回当前 Ollama 模型名 */
     protected override getModelName(): string {
-        return useGlobalStoreInstance.getState().i18n.settings.llmOllamaModel || 'qwen2.5';
+        const activeProfile = this.getActiveProfile();
+        return activeProfile?.model || useGlobalStoreInstance.getState().i18n.settings.llmOllamaModel || 'qwen2.5';
     }
 
     /** 获取 Ollama 端点地址 */
     private getBaseUrl(): string {
-        const url = useGlobalStoreInstance.getState().i18n.settings.llmOllamaUrl || OLLAMA_DEFAULT_URL;
+        const activeProfile = this.getActiveProfile();
+        const url = activeProfile?.url || useGlobalStoreInstance.getState().i18n.settings.llmOllamaUrl || OLLAMA_DEFAULT_URL;
         return url.replace(/\/+$/, '');
     }
 

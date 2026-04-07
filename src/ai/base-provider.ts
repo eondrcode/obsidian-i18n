@@ -35,6 +35,24 @@ export abstract class BaseProvider implements ITranslationProvider {
 
     // ======================== 公共接口 ========================
 
+    /**
+     * 获取当前服务商对应的激活方案 (Active Profile)
+     */
+    protected getActiveProfile(): any {
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        const providerId = settings.llmApi;
+        const config = LLM_PROVIDERS[providerId];
+        if (!config) return null;
+
+        const profilesField = `llm${config.labelKey}Profiles`;
+        const activeIdField = `llm${config.labelKey}ActiveProfileId`;
+
+        const profiles = (settings as any)[profilesField] as any[];
+        const activeId = (settings as any)[activeIdField] as string;
+
+        return profiles?.find((p: any) => p.id === activeId) || profiles?.[0];
+    }
+
     public async regexTranslate(items: RegexItem[], onBatchComplete: OnRegexBatchComplete, signal?: AbortSignal): Promise<RegexItem[]> {
         return this.executeParallelBatches(
             items,
@@ -81,7 +99,7 @@ export abstract class BaseProvider implements ITranslationProvider {
         }
 
         const tokens = estimateBatchTokens(items, systemPrompt);
-        
+
         // 获取当前活跃方案的计费配置
         const activeProfile = this.getActiveProfile();
         const useCustomPrice = activeProfile?.useCustomPrice ?? settings.llmUseCustomPrice;
@@ -98,29 +116,14 @@ export abstract class BaseProvider implements ITranslationProvider {
 
     // ======================== 辅助方法（子类可覆写） ========================
 
-    /** 获取当前活跃的配置方案 */
-    protected getActiveProfile(): any {
-        const settings = useGlobalStoreInstance.getState().i18n.settings;
-        const providerId = settings.llmApi;
-        const config = LLM_PROVIDERS[providerId];
-        if (!config) return null;
-
-        const profilesField = `llm${config.labelKey}Profiles`;
-        const activeIdField = `llm${config.labelKey}ActiveProfileId`;
-        
-        const profiles = (settings as any)[profilesField] as any[];
-        const activeId = (settings as any)[activeIdField] as string;
-        
-        return profiles?.find((p: any) => p.id === activeId) || profiles?.[0];
-    }
-
     /** 获取当前使用的模型名称（子类可覆写） */
     protected getModelName(): string {
         const activeProfile = this.getActiveProfile();
         if (activeProfile?.model) return activeProfile.model;
-        
+
         const settings = useGlobalStoreInstance.getState().i18n.settings;
-        return settings.llmOpenaiModel || 'gpt-4o-mini';
+        const config = LLM_PROVIDERS[settings.llmApi];
+        return (settings as any)[config?.modelField] || config?.defaultModel || 'gpt-4o-mini';
     }
 
     /** 获取并发限制数 */

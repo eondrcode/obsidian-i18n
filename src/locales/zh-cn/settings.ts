@@ -24,6 +24,7 @@ export default {
         AutoHeader: "自动化任务",
         ExternalHeader: "推荐插件",
         CloudHeader: "云端与网络",
+        ResetHeader: "危险操作",
         // 检查更新
         UpdateTitle: "检查更新",
         UpdateDesc: "启动时静默检查新版本，有更新时弹窗提醒。",
@@ -79,6 +80,13 @@ export default {
         GithubApiTokenMissing: "请先配置 GitHub Token",
         GithubApiFileNotFound: "文件不存在",
         GithubApiCheckFailed: "连接失败",
+        GithubApiCheckSuccess: "连接成功",
+        // 重置配置
+        ResetTitle: "重置插件方案",
+        ResetDesc: "将所有配置恢复至出厂状态。此操作不可逆，请谨慎操作。",
+        ResetBtn: "重置配置",
+        ResetConfirm: "确定要重置所有插件配置吗？这将清除所有已保存的设置（包括 API Key、正则表达式等）。",
+        ResetSuccess: "配置已重置",
     },
     Re: {
         // ── 正则参数 ──

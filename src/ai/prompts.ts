@@ -44,6 +44,13 @@ Your task is to translate extracted text snippets from source code and UI elemen
 - **Translation Style:** {{translationStyle}}
 - Output must read naturally in the {{targetLanguage}} while adhering strictly to software UI and technical documentation conventions.
 
+# Example
+[Input]
+[{"i":101, "s":"Settings"}, {"i":102, "s":"Save changes"}]
+
+[Output]
+[{"i":101, "t":"设置"}, {"i":102, "t":"保存更改"}]
+
 {{glossarySection}}
 
 # Quality Checklist (Self-Verify Before Output)
@@ -105,6 +112,13 @@ Your task is to translate abstract syntax tree (AST) text nodes from a user inte
 
 {{glossarySection}}
 
+# Example
+[Input]
+[{"i":50, "s":"Open", "y":"Button", "n":"openFile"}, {"i":51, "s":"⇧ Shift", "y":"Text", "n":"shortcut"}]
+
+[Output]
+[{"i":50, "t":"打开"}, {"i":51, "t":"⇧ Shift"}]
+
 # Quality Checklist (Self-Verify Before Output)
 - [ ] Is the output a totally naked JSON array?
 - [ ] Does each object ONLY contain \`i\` and \`t\`?
@@ -164,6 +178,13 @@ Your task is to translate Obsidian theme setting labels and descriptions into th
 - **Translation Style:** {{translationStyle}}
 
 {{glossarySection}}
+
+# Example
+[Input]
+[{"i":201, "s":"Accent color", "y":"name"}, {"i":202, "s":"The color of active elements.", "y":"description"}]
+
+[Output]
+[{"i":201, "t":"强调色"}, {"i":202, "t":"激活状态元素的颜色。"}]
 
 # Quality Checklist (Self-Verify Before Output)
 - [ ] Is the output a totally naked JSON array?

@@ -22,7 +22,8 @@ export class GeminiTranslationService extends BaseProvider {
 
     /** 覆写：返回当前 Gemini 模型名 */
     protected override getModelName(): string {
-        return useGlobalStoreInstance.getState().i18n.settings.llmGeminiModel || 'gemini-2.0-flash';
+        const activeProfile = this.getActiveProfile();
+        return activeProfile?.model || useGlobalStoreInstance.getState().i18n.settings.llmGeminiModel || 'gemini-2.0-flash';
     }
 
     // ======================== 核心 API 调用 ========================
@@ -32,8 +33,10 @@ export class GeminiTranslationService extends BaseProvider {
      */
     private async callGemini(items: any[], systemPrompt: string, signal?: AbortSignal, maxRetries = 2): Promise<any[]> {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
-        const apiKey = settings.llmGeminiKey;
-        const model = settings.llmGeminiModel || 'gemini-2.0-flash';
+        const activeProfile = this.getActiveProfile();
+
+        const apiKey = activeProfile?.key || settings.llmGeminiKey;
+        const model = this.getModelName();
 
         if (!apiKey) throw new Error('请先配置 Gemini API Key');
 

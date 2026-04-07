@@ -45,8 +45,8 @@ const QuickActionsCard: React.FC<QuickActionsCardProps> = memo(({
                     variant="secondary"
                     size="sm"
                     onClick={onIncrementalExtract}
-                    disabled={isExtracting}
-                    title={t('Editor.Actions.IncrementalExtractTip')}
+                    disabled={isExtracting || isApplied}
+                    title={isApplied ? t('Editor.Actions.IncrementalExtractDisabledTip') : t('Editor.Actions.IncrementalExtractTip')}
                     className="text-xs h-8 gap-1.5 text-foreground transition-all duration-200 hover:scale-[1.01] active:scale-95 group w-full font-medium bg-blue-500/10 hover:bg-blue-500/20 border-blue-500/20"
                 >
                     {isExtracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileOutput className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}

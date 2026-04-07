@@ -4,45 +4,29 @@ import traverse from '@babel/traverse';
 import { generate } from "@babel/generator";
 import * as t from '@babel/types';
 import { PluginTranslationV1Ast } from '~/types';
-
-const CONFIG = {
-    assignments: [
-        'overwriteName', 'innerHTML', 'outerHTML', 'title', 'alt', 'placeholder',
-        'textContent', 'innerText', 'ariaLabel', 'nodeValue'
-    ],
-    functions: [
-        'Notice', 'setTitle', 'setContent',
-        'setName', 'setDesc', 'setButtonText', 'setPlaceholder', 'setTooltip',
-        'addOption', 'addHeading', 'addText', 'setHint', 'setWarning',
-        'setText', 'appendText', 'createEl', 'createDiv', 'createSpan',
-        'addCommand',
-        'insertText', 'replaceRange', 'replaceSelection',
-        'log', 'error', 'warn', 'info',
-        'alert', 'confirm', 'prompt'
-    ],
-    keys: [
-        'name', 'description', 'text', 'placeholder', 'label', 'tooltip', 'title',
-        'header', 'desc', 'message', 'buttontext', 'aria-label',
-        'heading', 'content', 'tab', 'caption', 'subtitle', 'summary',
-        'info', 'warning', 'error', 'success', 'hint', 'instructions',
-        'link', 'selection', 'annotation', 'search', 'speech', 'page', 'empty',
-        'detail', 'body', 'option', 'notice'
-    ]
-};
-
-const CONTENT_RULES = {
-    REJECT_PATTERNS: [
-        /^\s*$/, /^\d+$/, /^[\w-]+\.[\w-]+\.\w+$/, /^https?:\/\//i, /^data:image\//i,
-        /^#([0-9a-f]{3}|[0-9a-f]{6})$/i, /^[a-z0-9-]+$/, /^[a-z]+[A-Z][a-zA-Z0-9]*$/,
-        /^[A-Z_][A-Z0-9_]*$/, /^px|em|rem|vh|vw|auto$/i, /^rgba?\(/i, /^\./,
-        /\.(png|jpg|gif|svg|css|js|ts|md|json)$/i
-    ],
-    VALID_PATTERNS: [
-        /\s/, /[^\x00-\x7F]/, /[!?,;:。！？，；：]\s*$/
-    ]
-};
+import { I18nSettings } from '../../settings/data';
+import { AST_DEFAULT_CONFIG, AST_DEFAULT_RULES } from './config';
 
 export class AstTranslator {
+    private config: any;
+    private contentRules: any;
+
+    constructor(settings?: I18nSettings) {
+        this.config = {
+            assignments: settings?.astAssignments || AST_DEFAULT_CONFIG.assignments,
+            functions: settings?.astFunctions || AST_DEFAULT_CONFIG.functions,
+            keys: settings?.astKeys || AST_DEFAULT_CONFIG.keys,
+        };
+
+        this.contentRules = {
+            REJECT_PATTERNS: (settings?.astRejectRe || []).length > 0
+                ? settings!.astRejectRe.map((re: string) => new RegExp(re))
+                : AST_DEFAULT_RULES.REJECT_PATTERNS,
+            VALID_PATTERNS: (settings?.astValidRe || []).length > 0
+                ? settings!.astValidRe.map((re: string) => new RegExp(re))
+                : AST_DEFAULT_RULES.VALID_PATTERNS,
+        };
+    }
     public loadFile(filePath: string, isModule: boolean = false) {
         try {
             return this.parseAst(fs.readFileSync(filePath, 'utf8'), isModule);
@@ -89,8 +73,8 @@ export class AstTranslator {
 
     private isValidText(text: string): boolean {
         if (text.length < 2) return false;
-        if (CONTENT_RULES.REJECT_PATTERNS.some(regex => regex.test(text))) return false;
-        if (CONTENT_RULES.VALID_PATTERNS.some(regex => regex.test(text))) return true;
+        if (this.contentRules.REJECT_PATTERNS.some((regex: RegExp) => regex.test(text))) return false;
+        if (this.contentRules.VALID_PATTERNS.some((regex: RegExp) => regex.test(text))) return true;
         return false;
     }
 
@@ -99,29 +83,29 @@ export class AstTranslator {
             VariableDeclarator: (path) => {
                 const node = path.node;
                 const name = t.isIdentifier(node.id) ? node.id.name : null;
-                if (name && CONFIG.assignments.includes(name) && this.isStrNode(node.init)) callback('VariableDeclarator', name, node.init);
+                if (name && this.config.assignments.includes(name) && this.isStrNode(node.init)) callback('VariableDeclarator', name, node.init);
             },
             AssignmentExpression: (path) => {
                 const node = path.node;
                 const name = this.getAssignName(node.left);
-                if (name && CONFIG.assignments.includes(name) && this.isStrNode(node.right)) callback('AssignmentExpression', name, node.right);
+                if (name && this.config.assignments.includes(name) && this.isStrNode(node.right)) callback('AssignmentExpression', name, node.right);
             },
             ObjectProperty: (path) => {
                 const node = path.node;
                 const name = this.getObjKeyName(node.key);
-                if (name && CONFIG.keys.includes(name) && this.isStrNode(node.value)) callback('ObjectProperty', name, node.value);
+                if (name && this.config.keys.includes(name) && this.isStrNode(node.value)) callback('ObjectProperty', name, node.value);
             },
             CallExpression: (path) => {
                 const node = path.node;
                 const name = this.getCallName(node.callee);
-                if (name && CONFIG.functions.includes(name)) {
+                if (name && this.config.functions.includes(name)) {
                     node.arguments.forEach(arg => { if (this.isStrNode(arg)) callback('CallExpression', name, arg); });
                 }
             },
             NewExpression: (path) => {
                 const node = path.node;
                 const name = this.getCallName(node.callee);
-                if (name && CONFIG.functions.includes(name)) {
+                if (name && this.config.functions.includes(name)) {
                     node.arguments.forEach(arg => { if (this.isStrNode(arg)) callback('NewExpression', name, arg); });
                 }
             }

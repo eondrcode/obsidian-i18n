@@ -1,6 +1,7 @@
 import { pageRule } from '../utils';
 import { DEFAULT_AST_PROMPT_TEMPLATE, DEFAULT_REGEX_PROMPT_TEMPLATE, DEFAULT_THEME_PROMPT_TEMPLATE } from '../ai/prompts';
 import { LLM_PROVIDERS } from '../ai/constants';
+import { AST_DEFAULT_CONFIG, REGEX_DEFAULT_CONFIG } from '../utils/translator/config';
 
 export interface LLMProfile {
     id: string;
@@ -13,8 +14,8 @@ export interface LLMProfile {
     priceOutput: number;    // 人民币 / 每百万 Token
 }
 
-export interface OpenAIProfile extends LLMProfile {}
-export interface GeminiProfile extends LLMProfile {}
+export interface OpenAIProfile extends LLMProfile { }
+export interface GeminiProfile extends LLMProfile { }
 
 export interface GitHubProfile {
     id: string;
@@ -58,11 +59,11 @@ export interface I18nSettings {
     // ==========================================
     // 方案管理与计费配置 (所有服务商)
     // ==========================================
-    
+
     // OpenAI (ID: 1)
     llmOpenaiProfiles: OpenAIProfile[];
     llmOpenaiActiveProfileId: string;
-    
+
     // Gemini (ID: 2)
     llmGeminiProfiles: GeminiProfile[];
     llmGeminiActiveProfileId: string;
@@ -546,50 +547,18 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     reFlags: 'gs',            // 默认全局搜索+忽略多行等限制
     reLength: 300,            // 默认限制文本最长 300 字符
-    reDatas: [
-        "(Notice|log|error|setText|setButtonText|setName|setDesc|setPlaceholder|setTooltip|appendText|setTitle|addHeading|renderMarkdown)\\(\\s*(['\"`])(.*?)\\2\\s*\\)",
-        "(textContent|innerText|name|description|selection|annotation|link|text|search|speech|page|settings)\\s*[:=]\\s*(['\"`])(.*?)\\2"
-    ],
-    reRejectRe: [
-        "^\\s*$", "^\\d+$", "^[\\w-]+\\.[\\w-]+\\.\\w+$", "^https?:\\/\\/",
-        "^data:image\\/", "^#([0-9a-f]{3}|[0-9a-f]{6})$", "^[a-z0-9-]+$",
-        "^[a-z]+[A-Z][a-zA-Z0-9]*$", "^[A-Z_][A-Z0-9_]*$", "^px|em|rem|vh|vw|auto$",
-        "^rgba?\\(", "^\\.", "\\.(png|jpg|gif|svg|css|js|ts|md|json)$"
-    ],
-    reValidRe: [
-        "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
-    ],
+    reDatas: REGEX_DEFAULT_CONFIG.patterns,
+    reRejectRe: REGEX_DEFAULT_CONFIG.rejectPatterns,
+    reValidRe: REGEX_DEFAULT_CONFIG.validPatterns,
 
     // ==============================
     // AST 提取规则
     // ==============================
-    astAssignments: [
-        'overwriteName', 'innerHTML', 'outerHTML', 'title', 'alt', 'placeholder',
-        'textContent', 'innerText', 'ariaLabel', 'nodeValue'
-    ],
-    astFunctions: [
-        'Notice', 'setTitle', 'setContent', 'setName', 'setDesc', 'setButtonText',
-        'setPlaceholder', 'setTooltip', 'addOption', 'addHeading', 'addText',
-        'setHint', 'setWarning', 'setText', 'appendText', 'createEl', 'createDiv',
-        'createSpan', 'addCommand', 'insertText', 'replaceRange', 'replaceSelection',
-        'log', 'error', 'warn', 'info', 'alert', 'confirm', 'prompt'
-    ],
-    astKeys: [
-        'name', 'description', 'text', 'placeholder', 'label', 'tooltip', 'title',
-        'header', 'desc', 'message', 'buttontext', 'aria-label', 'heading', 'content',
-        'tab', 'caption', 'subtitle', 'summary', 'info', 'warning', 'error', 'success',
-        'hint', 'instructions', 'link', 'selection', 'annotation', 'search', 'speech',
-        'page', 'empty', 'detail', 'body', 'option', 'notice'
-    ],
-    astRejectRe: [
-        "^\\s*$", "^\\d+$", "^[\\w-]+\\.[\\w-]+\\.\\w+$", "^https?:\\/\\/",
-        "^data:image\\/", "^#([0-9a-f]{3}|[0-9a-f]{6})$", "^[a-z0-9-]+$",
-        "^[a-z]+[A-Z][a-zA-Z0-9]*$", "^[A-Z_][A-Z0-9_]*$", "^px|em|rem|vh|vw|auto$",
-        "^rgba?\\(", "^\\.", "\\.(png|jpg|gif|svg|css|js|ts|md|json)$"
-    ],
-    astValidRe: [
-        "\\s", "[^\\x00-\\x7F]", "[!?,;:。！？，；：]\\s*$"
-    ],
+    astAssignments: AST_DEFAULT_CONFIG.assignments,
+    astFunctions: AST_DEFAULT_CONFIG.functions,
+    astKeys: AST_DEFAULT_CONFIG.keys,
+    astRejectRe: REGEX_DEFAULT_CONFIG.rejectPatterns, // Regex defaults are used as strings for UI
+    astValidRe: REGEX_DEFAULT_CONFIG.validPatterns,
 
     // ==============================
     // 网络配置
