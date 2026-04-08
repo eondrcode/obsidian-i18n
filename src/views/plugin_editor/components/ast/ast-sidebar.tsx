@@ -41,7 +41,9 @@ const AstSidebar = ({
     hasChecked,
     setActiveTab,
     onClearDiagnose,
-    isApplied
+    onRestoreAllErrors,
+    isApplied,
+    onJumpError
 }: {
     translationEntries?: any[],
     progress?: number,
@@ -56,11 +58,13 @@ const AstSidebar = ({
     onOpenFile?: () => void,
     onDiagnose?: () => void,
     onClearDiagnose?: () => void,
+    onRestoreAllErrors?: () => void,
     isDiagnosing?: boolean,
     errorItems?: DiagnoseError[],
     hasChecked?: boolean,
     setActiveTab?: (value: string) => void,
-    isApplied?: boolean
+    isApplied?: boolean,
+    onJumpError?: (error: DiagnoseError) => void
 }) => {
     const { t } = useTranslation();
     // 5. AST Translation Controller (Received via props)
@@ -141,10 +145,12 @@ const AstSidebar = ({
                     <DiagnoseCard
                         onDiagnose={onDiagnose!}
                         onClear={onClearDiagnose!}
+                        onRestoreAllErrors={onRestoreAllErrors}
                         isDiagnosing={isDiagnosing!}
                         errorItems={errorItems || []}
                         hasChecked={hasChecked}
                         setActiveTab={setActiveTab}
+                        onJumpError={onJumpError}
                     />
 
                     {showLLM && (

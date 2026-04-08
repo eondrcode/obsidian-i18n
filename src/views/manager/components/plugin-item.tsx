@@ -183,6 +183,8 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 const files = Object.keys(translationJson.dict);
                 await i18n.backupManager.createBackup(plugin.id, pluginDir, files);
 
+                const newContents: Record<string, string> = {};
+
                 for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
                     const targetFilePath = path.join(pluginDir, file);
                     if (!fs.existsSync(targetFilePath)) continue;
@@ -209,7 +211,11 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                         }
                     }
 
-                    fs.writeFileSync(targetFilePath, fileString);
+                    newContents[targetFilePath] = fileString;
+                }
+
+                for (const [targetFilePath, content] of Object.entries(newContents)) {
+                    fs.writeFileSync(targetFilePath, content);
                 }
             }
             i18n.stateManager.setPluginState(plugin.id, {
@@ -218,12 +224,54 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
                 pluginVersion: plugin.version,
                 translationVersion: translationJson.metadata.version
             });
-            if (isEnabled) {
-                const reloadRes = await reloadPlugin(plugin.id);
+            const previousEnabledState = isEnabled;
+            let loadFailed = false;
+
+            try {
                 // @ts-ignore
-                if (reloadRes && !i18n.app.plugins.enabledPlugins.has(plugin.id)) {
-                    i18n.notice.error(t('Manager.Plugins.Errors.LoadFailedAfterApply'));
+                if (i18n.app.plugins.enabledPlugins.has(plugin.id)) {
+                    // @ts-ignore
+                    await i18n.app.plugins.disablePlugin(plugin.id);
                 }
+                // @ts-ignore
+                await i18n.app.plugins.enablePlugin(plugin.id);
+
+                // @ts-ignore
+                if (!i18n.app.plugins.plugins[plugin.id]) {
+                    loadFailed = true;
+                }
+            } catch (error) {
+                console.warn("[i18n 安全防护] 插件试运行失败:", error);
+                loadFailed = true;
+            }
+
+            if (loadFailed) {
+                i18n.notice.error(t('Manager.Plugins.Errors.LoadFailedAfterApply') || '译文导致核心逻辑损坏，已触发安全拦截并自动回滚。');
+
+                // 开始强效回滚到未翻译初始状态
+                await i18n.backupManager.restoreBackup(plugin.id, pluginDir);
+                i18n.stateManager.deletePluginState(plugin.id);
+
+                // 恢复它原本的状态
+                if (previousEnabledState) {
+                    // @ts-ignore
+                    await i18n.app.plugins.enablePlugin(plugin.id);
+                } else {
+                    // @ts-ignore
+                    await i18n.app.plugins.disablePlugin(plugin.id);
+                }
+
+                refreshParent();
+                return; // 终止后续流程
+            }
+
+            // 试运行成功，如果是原本关闭的，我们要给它关回去
+            if (!previousEnabledState) {
+                // @ts-ignore
+                await i18n.app.plugins.disablePlugin(plugin.id);
+            } else {
+                // 成功重载后的轻提示（保持之前调 reloadPlugin 时的体验）
+                i18n.notice.successPrefix(t('Manager.Plugins.Notices.ReloadSuccess') || '插件重载成功', plugin.id);
             }
             refreshParent();
         } catch (error) {

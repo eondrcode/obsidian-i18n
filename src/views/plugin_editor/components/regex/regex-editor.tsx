@@ -32,6 +32,26 @@ const RegexEditor: React.FC<Props> = () => {
     // 获取数据
     const regexItems = useRegexStore.use.regexItems();
 
+    const regexItemsRef = React.useRef(regexItems);
+    React.useEffect(() => {
+        regexItemsRef.current = regexItems;
+    }, [regexItems]);
+
+    React.useEffect(() => {
+        const handleJump = (e: CustomEvent<{ type: string, id: number }>) => {
+            if (e.detail.type === 'regex') {
+                const item = regexItemsRef.current.find(i => i.id === e.detail.id);
+                if (item && item.source) {
+                    setFilterType('all');
+                    setSearchQuery(item.source);
+                }
+                setEditingId(e.detail.id);
+            }
+        };
+        window.addEventListener('i18n-jump-error', handleJump as EventListener);
+        return () => window.removeEventListener('i18n-jump-error', handleJump as EventListener);
+    }, [setSearchQuery]);
+
     // 过滤后的条目（使用 deferred 值）
     const filteredItems = useMemo(() => {
         let items = regexItems;

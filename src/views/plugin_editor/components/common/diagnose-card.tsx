@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Badge } from "~/shadcn";
 import { TemplateCard } from './template-card';
-import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Trash2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, ChevronRight, Trash2, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from "~/utils";
 import { useRegexStore } from '../../store';
@@ -10,41 +10,36 @@ import { DiagnoseError } from '../../types';
 interface DiagnoseCardProps {
     onDiagnose: () => void;
     onClear?: () => void;
+    onRestoreAllErrors?: () => void;
     isDiagnosing: boolean;
     errorItems: DiagnoseError[];
     hasChecked?: boolean;
     setActiveTab?: (tab: string) => void;
+    onJumpError?: (error: DiagnoseError) => void;
 }
 
 export const DiagnoseCard: React.FC<DiagnoseCardProps> = ({
     onDiagnose,
     onClear,
+    onRestoreAllErrors,
     isDiagnosing,
     errorItems,
     hasChecked,
-    setActiveTab
+    setActiveTab,
+    onJumpError
 }) => {
     const { t } = useTranslation();
 
-    const containerRef = React.useRef<HTMLDivElement>(null);
     const handleJump = (error: DiagnoseError) => {
         if (setActiveTab) {
             setActiveTab(error.type);
         }
-
-        // 延迟执行以等待 Tab 切换渲染完成
-        setTimeout(() => {
-            const root = containerRef.current?.getRootNode() as ShadowRoot | Document;
-            const element = root?.getElementById(`${error.type}-row-${error.id}`);
-
-            if (element) {
-                element.scrollIntoView({ behavior: 'auto', block: 'center' });
-                element.classList.add('bg-yellow-100', 'dark:bg-yellow-900/30');
-                setTimeout(() => {
-                    element.classList.remove('bg-yellow-100', 'dark:bg-yellow-900/30');
-                }, 2000);
-            }
-        }, 100);
+        if (onJumpError) {
+            onJumpError(error);
+        }
+        window.dispatchEvent(new CustomEvent('i18n-jump-error', {
+            detail: { type: error.type, id: error.id }
+        }));
     };
 
     return (
@@ -52,27 +47,40 @@ export const DiagnoseCard: React.FC<DiagnoseCardProps> = ({
             title={t('Editor.Actions.Diagnose')}
             icon={Activity}
         >
-            <div className="space-y-3" ref={containerRef}>
+            <div className="space-y-3">
+                {/* 第一行：语法诊断按钮 */}
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full gap-2 h-8"
+                    onClick={onDiagnose}
+                    disabled={isDiagnosing}
+                >
+                    <Activity className={cn("w-3.5 h-3.5", isDiagnosing && "animate-spin text-blue-500")} />
+                    {isDiagnosing ? t('Editor.Status.Diagnosing') : t('Editor.Actions.Diagnose')}
+                </Button>
+
+                {/* 第二行：还原 + 清空 */}
                 <div className="flex gap-2">
                     <Button
                         variant="outline"
                         size="sm"
                         className="flex-1 gap-2 h-8"
-                        onClick={onDiagnose}
-                        disabled={isDiagnosing}
+                        onClick={onRestoreAllErrors}
+                        disabled={isDiagnosing || errorItems.length === 0}
                     >
-                        <Activity className={cn("w-3.5 h-3.5", isDiagnosing && "animate-spin text-blue-500")} />
-                        {isDiagnosing ? t('Editor.Status.Diagnosing') : t('Editor.Actions.Diagnose')}
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {t('Editor.Actions.RestoreAllErrors')}
                     </Button>
                     <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-8 w-8 p-0"
+                        className="flex-1 gap-2 h-8"
                         onClick={onClear}
                         disabled={isDiagnosing || (!hasChecked && errorItems.length === 0)}
-                        title={t('Common.Actions.Clear')}
                     >
-                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive transition-colors" />
+                        <Trash2 className="w-3.5 h-3.5" />
+                        {t('Editor.Actions.ClearDiagnose')}
                     </Button>
                 </div>
 

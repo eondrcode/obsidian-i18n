@@ -333,7 +333,7 @@ export default {
         CatSponsorDesc: "为项目持续提供电力的金主爸爸"
     },
     Admin: {
-        TabName: "管理",
+        TabName: "管理员",
         Title: "社区数据看板",
         AdminControl: "管理员控制",
         Subtitle: "深度监控社区动态与注册表权重分配系统",

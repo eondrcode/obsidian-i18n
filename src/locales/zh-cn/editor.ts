@@ -65,6 +65,7 @@ export default {
         Source: "源码",
         Trans: "译文",
         Restore: "还原",
+        RestoreAllErrors: "还原所有异常项",
         Settings: "配置",
         Diagnose: "语法诊断",
         ClearDiagnose: "清除诊断"
@@ -138,6 +139,9 @@ export default {
     Errors: {
         FailExists: "新增失败\n译文中已存在此内容",
         SyntaxErrorTotal: "诊断完成：发现 {{count}} 个语法错误",
+        SyntaxError: "基础语法错误",
+        BracketMismatch: "括号配对缺失",
+        VariableMismatch: "变量占位符丢失或不匹配",
         SyntaxErrorAst: "AST 提取失败",
         SyntaxErrorRegex: "正则提取失败",
         NoMetadata: "未找到元数据，无法进行诊断。",

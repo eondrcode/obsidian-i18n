@@ -401,86 +401,147 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
             const astTranslator = new AstTranslator(i18n.settings);
             const regexTranslator = new RegexTranslator(i18n.settings);
 
-            // 2. 批量语法检查 (性能优化)
+            // 2. 深度语法与试运行检测 (物理沙箱重载阶段)
             try {
-                // 解析基准 AST 并缓存，避免后续重复解析
-                const baseAst = astTranslator.loadCode(originalCode);
-                if (!baseAst) {
-                    notice.error(t('Editor.Errors.SourceError'));
-                    return;
-                }
+                // @ts-ignore
+                const wasEnabled = i18n.app.plugins.enabledPlugins.has(pluginId);
+                // @ts-ignore
+                const basePath = path.normalize(i18n.app.vault.adapter.getBasePath());
+                // @ts-ignore
+                const manifest = i18n.app.plugins.manifests[pluginId];
+                if (!manifest) throw new Error("Manifest not found");
+                const pluginDir = path.join(basePath, manifest.dir || '');
+                const targetFilePath = path.join(pluginDir, currentFile);
 
-                // 准备要测试的项
-                const activeAstItems = astItems.filter(item => item.target && item.target !== item.source);
-                const activeRegexItems = regexItems.filter(item => item.target && item.target !== item.source);
-
-                if (activeAstItems.length === 0 && activeRegexItems.length === 0) {
-                    notice.success(t('Editor.Notices.DiagnosisSuccess'));
-                    return;
-                }
-
-                // 第一阶段：全量批量测试
-                let batchSuccess = true;
                 try {
-                    const testAst = astTranslator.cloneAst(baseAst);
-                    const astCode = astTranslator.translate(testAst, activeAstItems);
-                    const finalCode = regexTranslator.translate(astCode, activeRegexItems);
-                    if (!astTranslator.loadCode(finalCode)) {
-                        batchSuccess = false;
+                    // 解析基准 AST 并缓存，避免后续重复解析
+                    const baseAst = astTranslator.loadCode(originalCode);
+                    if (!baseAst) {
+                        notice.error(t('Editor.Errors.SourceError'));
+                        return;
                     }
-                } catch (e) {
-                    batchSuccess = false;
-                }
 
-                // 第二阶段：如果批量失败，使用二分法快速定位
-                if (!batchSuccess) {
-                    // 定义检查函数 (内部使用 AST 克隆)
-                    const checkItems = (checkAstItems: typeof activeAstItems, checkRegexItems: typeof activeRegexItems): boolean => {
+                    // 准备要测试的项
+                    const activeAstItems = astItems.filter(item => item.target && item.target !== item.source);
+                    const activeRegexItems = regexItems.filter(item => item.target && item.target !== item.source);
+
+                    if (activeAstItems.length === 0 && activeRegexItems.length === 0) {
+                        notice.success(t('Editor.Notices.DiagnosisSuccess'));
+                        return;
+                    }
+
+                    // 第一跑：纯静态语法与合规内容校验 (Static Compliance Scan)
+                    const { validateBracketBalance, validateVariableConsistency } = await import('./utils/validation-utils');
+
+                    for (const item of activeAstItems) {
+                        const source = item.source || '';
+                        const target = item.target || '';
+                        if (!astTranslator.validateTargetSyntax(target)) {
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.SyntaxError') || '语法错误') + ': ' + target });
+                        } else if (!validateBracketBalance(target)) {
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target });
+                        } else if (!validateVariableConsistency(source, target)) {
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target });
+                        }
+                    }
+
+                    for (const item of activeRegexItems) {
+                        const target = item.target || '';
+                        if (!validateBracketBalance(target)) {
+                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target });
+                        } else if (!validateVariableConsistency(item.source || '', target)) {
+                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target });
+                        }
+                    }
+
+                    // 如果静态筛查出严重格式缺陷，直接中断并汇报，避免后续无意义的物理重启探险
+                    if (results.length > 0) {
+                        setErrorItems(results);
+                        notice.error(t('Editor.Errors.SyntaxErrorTotal', { count: results.length }));
+                        return; // 提前退出！！
+                    }
+
+                    // 环境联调测试函数 (将代码写入文件并在真实中拉起插件)
+                    const checkItemsDeep = async (checkAstItems: typeof activeAstItems, checkRegexItems: typeof activeRegexItems): Promise<boolean> => {
                         try {
                             const testAst = astTranslator.cloneAst(baseAst);
                             const astCode = astTranslator.translate(testAst, checkAstItems);
                             const finalCode = regexTranslator.translate(astCode, checkRegexItems);
-                            return !!astTranslator.loadCode(finalCode);
-                        } catch (e) {
-                            return false;
-                        }
-                    };
 
-                    // 递归二分查找逻辑
-                    const findErrors = (items: { type: 'ast' | 'regex', data: any }[]) => {
-                        if (items.length === 0) return;
+                            // 第一步：快速 AST 检查把关
+                            if (!astTranslator.loadCode(finalCode)) return false;
 
-                        // 验证当前这组是否有错
-                        const currentAst = items.filter(i => i.type === 'ast').map(i => i.data);
-                        const currentRegex = items.filter(i => i.type === 'regex').map(i => i.data);
-
-                        if (checkItems(currentAst, currentRegex)) return; // 这组没问题
-
-                        // 如果只有一个条目，那它就是元凶
-                        if (items.length === 1) {
-                            const err = items[0];
-                            // 针对 AST 项，先尝试快速语法验证，排除掉简单的输入错误
-                            if (err.type === 'ast' && !astTranslator.validateTargetSyntax(err.data.target)) {
-                                results.push({ type: 'ast', id: err.data.id, source: err.data.source });
-                            } else {
-                                results.push({ type: err.type, id: err.data.id, source: err.data.source });
+                            // 第二步：真实写入并沙箱重启验证
+                            fs.writeFileSync(targetFilePath, finalCode);
+                            // @ts-ignore
+                            if (i18n.app.plugins.enabledPlugins.has(pluginId)) {
+                                // @ts-ignore
+                                await i18n.app.plugins.disablePlugin(pluginId);
                             }
-                            return;
-                        }
+                            // @ts-ignore
+                            await i18n.app.plugins.enablePlugin(pluginId);
 
-                        // 二分分割
-                        const mid = Math.floor(items.length / 2);
-                        findErrors(items.slice(0, mid));
-                        findErrors(items.slice(mid));
+                            // 必须判断组件真的拉起来了
+                            // @ts-ignore
+                            return !!i18n.app.plugins.plugins[pluginId];
+                        } catch (e) {
+                            return false; // 比如文件写入错误、重载抛错均视为拦截
+                        }
                     };
 
-                    // 将所有待检测项合并为一个列表进行二分
-                    const allItems: { type: 'ast' | 'regex', data: any }[] = [
-                        ...activeAstItems.map(i => ({ type: 'ast' as const, data: i })),
-                        ...activeRegexItems.map(i => ({ type: 'regex' as const, data: i }))
-                    ];
+                    // 第一阶段：先尝试批量安全通过全测
+                    let batchSuccess = await checkItemsDeep(activeAstItems, activeRegexItems);
 
-                    findErrors(allItems);
+                    // 第二阶段：如果批量失败，带 async 递归环境的二分分割盲搜
+                    if (!batchSuccess) {
+                        const findErrors = async (items: { type: 'ast' | 'regex', data: any }[]) => {
+                            if (items.length === 0) return;
+
+                            const currentAst = items.filter(i => i.type === 'ast').map(i => i.data);
+                            const currentRegex = items.filter(i => i.type === 'regex').map(i => i.data);
+
+                            if (await checkItemsDeep(currentAst, currentRegex)) return; // 这组没问题
+
+                            if (items.length === 1) {
+                                const err = items[0];
+                                if (err.type === 'ast' && !astTranslator.validateTargetSyntax(err.data.target)) {
+                                    results.push({ type: 'ast', id: err.data.id, source: err.data.source });
+                                } else {
+                                    results.push({ type: err.type, id: err.data.id, source: err.data.source });
+                                }
+                                return;
+                            }
+
+                            const mid = Math.floor(items.length / 2);
+                            await findErrors(items.slice(0, mid));
+                            await findErrors(items.slice(mid));
+                        };
+
+                        const allItems: { type: 'ast' | 'regex', data: any }[] = [
+                            ...activeAstItems.map(i => ({ type: 'ast' as const, data: i })),
+                            ...activeRegexItems.map(i => ({ type: 'regex' as const, data: i }))
+                        ];
+
+                        await findErrors(allItems);
+                    }
+                } finally {
+                    // 【强制保证退出后复原】不论任何情况，确保目标恢复为原本的模样并重启
+                    try {
+                        if (originalCode) {
+                            fs.writeFileSync(targetFilePath, originalCode);
+                        }
+                        // @ts-ignore
+                        if (i18n.app.plugins.enabledPlugins.has(pluginId)) {
+                            // @ts-ignore
+                            await i18n.app.plugins.disablePlugin(pluginId);
+                        }
+                        if (wasEnabled) {
+                            // @ts-ignore
+                            await i18n.app.plugins.enablePlugin(pluginId);
+                        }
+                    } catch (e) {
+                        console.error("[i18n 深度诊断系统] 致命错误：环境清理失败！", e);
+                    }
                 }
             } catch (e) {
                 console.error("Diagnostic process failed", e);
@@ -505,6 +566,33 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
         setErrorItems([]);
         setHasChecked(false);
     }, []);
+
+    const handleRestoreAllErrors = React.useCallback(() => {
+        if (errorItems.length === 0) return;
+        
+        const newAstItems = [...useRegexStore.getState().astItems];
+        const newRegexItems = [...useRegexStore.getState().regexItems];
+        
+        errorItems.forEach(error => {
+            if (error.type === 'ast') {
+                const idx = newAstItems.findIndex(i => i.id === error.id);
+                if (idx !== -1) {
+                    newAstItems[idx] = { ...newAstItems[idx], target: newAstItems[idx].source };
+                }
+            } else if (error.type === 'regex') {
+                const idx = newRegexItems.findIndex(i => i.id === error.id);
+                if (idx !== -1) {
+                    newRegexItems[idx] = { ...newRegexItems[idx], target: newRegexItems[idx].source };
+                }
+            }
+        });
+        
+        setAstItems(newAstItems);
+        setRegexItems(newRegexItems);
+        setErrorItems([]);
+        setHasChecked(false);
+        notice.success(t('Editor.Notices.SuccessRestore'));
+    }, [errorItems, notice, t, setAstItems, setRegexItems]);
 
     // 快捷键: Ctrl + S 保存
     useEffect(() => {
@@ -680,6 +768,7 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                                     onOpenFile={handleOpenFile}
                                     onDiagnose={handleDiagnose}
                                     onClearDiagnose={handleClearDiagnose}
+                                    onRestoreAllErrors={handleRestoreAllErrors}
                                     isDiagnosing={isDiagnosing}
                                     errorItems={errorItems}
                                     hasChecked={hasChecked}
@@ -694,6 +783,7 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                                     onOpenFile={handleOpenFile}
                                     onDiagnose={handleDiagnose}
                                     onClearDiagnose={handleClearDiagnose}
+                                    onRestoreAllErrors={handleRestoreAllErrors}
                                     isDiagnosing={isDiagnosing}
                                     errorItems={errorItems}
                                     hasChecked={hasChecked}

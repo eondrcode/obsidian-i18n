@@ -31,6 +31,26 @@ const AstEditor: React.FC<Props> = () => {
     // 当前编辑项ID
     const [editingId, setEditingId] = useState<number | null>(null);
 
+    const astItemsRef = React.useRef(astItems);
+    React.useEffect(() => {
+        astItemsRef.current = astItems;
+    }, [astItems]);
+
+    React.useEffect(() => {
+        const handleJump = (e: CustomEvent<{ type: string, id: number }>) => {
+            if (e.detail.type === 'ast') {
+                const item = astItemsRef.current.find(i => i.id === e.detail.id);
+                if (item && item.source) {
+                    setFilterType('all');
+                    setSearchQuery(item.source);
+                }
+                setEditingId(e.detail.id);
+            }
+        };
+        window.addEventListener('i18n-jump-error', handleJump as EventListener);
+        return () => window.removeEventListener('i18n-jump-error', handleJump as EventListener);
+    }, [setSearchQuery]);
+
     // 过滤后的条目（使用 deferred 值，避免每次按键都同步计算）
     const filteredItems = useMemo(() => {
         let items = astItems;

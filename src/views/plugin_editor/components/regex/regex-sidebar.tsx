@@ -30,11 +30,13 @@ interface Props {
     onOpenFile?: () => void;
     onDiagnose?: () => void;
     onClearDiagnose?: () => void;
+    onRestoreAllErrors?: () => void;
     isDiagnosing?: boolean;
     errorItems?: DiagnoseError[];
     hasChecked?: boolean;
     setActiveTab?: (tab: string) => void;
     isApplied?: boolean;
+    onJumpError?: (error: DiagnoseError) => void;
 }
 
 /**
@@ -52,7 +54,9 @@ const RegexSidebar: React.FC<Props> = ({
     hasChecked,
     setActiveTab,
     onClearDiagnose,
-    isApplied
+    onRestoreAllErrors,
+    isApplied,
+    onJumpError
 }) => {
     const { t } = useTranslation();
 
@@ -145,10 +149,12 @@ const RegexSidebar: React.FC<Props> = ({
                     <DiagnoseCard
                         onDiagnose={onDiagnose!}
                         onClear={onClearDiagnose!}
+                        onRestoreAllErrors={onRestoreAllErrors}
                         isDiagnosing={isDiagnosing!}
                         errorItems={errorItems || []}
                         hasChecked={hasChecked}
                         setActiveTab={setActiveTab}
+                        onJumpError={onJumpError}
                     />
                     {showLLM && (
                         <RegexLLMCard controller={activeController} />
