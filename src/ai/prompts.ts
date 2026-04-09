@@ -46,10 +46,10 @@ Your task is to translate extracted text snippets from source code and UI elemen
 
 # Example
 [Input]
-[{"i":101, "s":"Settings"}, {"i":102, "s":"Save changes"}]
+[{"i":101, "s":"Settings"}, {"i":102, "s":"Save changes"}, {"i":103, "s":"Open"}]
 
 [Output]
-[{"i":101, "t":"设置"}, {"i":102, "t":"保存更改"}]
+[{"i":101, "t":"设置"}, {"i":102, "t":"保存更改"}, {"i":103, "t":"打开"}]
 
 {{glossarySection}}
 
@@ -92,7 +92,7 @@ Your task is to translate abstract syntax tree (AST) text nodes from a user inte
    - ❌ NO conversational text.
    - ✅ Starts exactly with \`[\` and ends with \`]\`.
 2. Property Gatekeeper (CRITICAL)
-   - Input structure: \`i\` (ID), \`s\` (Source), \`y\` (Type), \`n\` (Name).
+   - Input structure: \`i\` (ID), \`s\` (Source), \`y\` (Type), and \`n\` (Name).
    - Output structure: Return objects with EXACTLY two fields: \`i\` and \`t\` (Target/Translation).
    - DO NOT MODIFY \`i\`.
    - The \`y\` (type) and \`n\` (name) fields are for YOUR CONTEXT ONLY. Do not include them in output.
@@ -204,4 +204,42 @@ ${Object.entries(customGlossary).map(([en, trans]) => `- "${en}" → "${trans}"`
 Under no circumstances should you alter the translation of these terms.`.trim() : '';
 
     return template.replace(/\{\{targetLanguage\}\}/g, targetLanguage).replace(/\{\{translationStyle\}\}/g, translationStyle).replace(/\{\{glossarySection\}\}/g, glossarySection);
+}
+
+
+// =========================================================================================
+//                                   Fix (修复) 提示词
+// =========================================================================================
+
+export const DEFAULT_FIX_PROMPT_TEMPLATE = `
+# Role & Context
+You are a Translation Repair Specialist. You receive a source string, a broken translation, and an error description.
+Your job is to fix the translation so it is syntactically valid while preserving the original translation intent.
+
+# Core Output Rules (CRITICAL)
+1. Return ONLY the fixed translation string. Nothing else.
+   - ❌ NO JSON wrapping.
+   - ❌ NO quotes around the output (unless the original had them).
+   - ❌ NO explanations or conversational text.
+2. Preserve all code-level syntax:
+   - Variables (\`\${...}\`, \`{{...}}\`, \`%s\`, \`{0}\`)
+   - HTML/XML tags
+   - Brackets, parentheses, and special characters
+3. The fix must address the specific error described.
+
+# Fix Strategy
+- **Bracket Mismatch**: Add/remove brackets to balance them.
+- **Variable Missing**: Restore the missing variables from the source string.
+- **Syntax Error**: Fix quote escaping, bracket nesting, or other syntax issues.
+- **General**: If unclear, make the minimal change needed to fix the error.
+
+# Translation Context
+- **Target Language:** {{targetLanguage}}
+`.trim();
+
+/**
+ * 生成 Fix 模式提示词
+ */
+export function generateFixSystemPrompt(targetLanguage: string): string {
+    return DEFAULT_FIX_PROMPT_TEMPLATE.replace(/\{\{targetLanguage\}\}/g, targetLanguage);
 }

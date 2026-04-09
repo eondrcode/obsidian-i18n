@@ -82,4 +82,19 @@ export interface ITranslationProvider {
         items: any[],
         type: 'regex' | 'ast' | 'theme'
     ): { tokens: number; cost: number };
+
+    /**
+     * 单项翻译修复
+     * 针对诊断发现的语法错误，让 AI 尝试修复译文
+     *
+     * @param source  原文
+     * @param target  当前有语法问题的译文
+     * @param errorMessage  错误描述 (如 "括号不匹配")
+     * @returns  修复后的译文字符串
+     */
+    fixTranslation(
+        source: string,
+        target: string,
+        errorMessage: string,
+    ): Promise<string>;
 }

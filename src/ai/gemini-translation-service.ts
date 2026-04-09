@@ -141,14 +141,20 @@ export class GeminiTranslationService extends BaseProvider {
 
     protected async callRegexTranslationAPI(items: RegexItem[], signal?: AbortSignal): Promise<RegexItem[]> {
         const systemPrompt = this.getRegexSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source };
+            return simplified;
+        });
         const results = await this.callGemini(simplifiedItems, systemPrompt, signal);
         return this.mapResultsBack(items, results);
     }
 
     protected async callAstTranslationAPI(items: AstItem[], signal?: AbortSignal): Promise<AstItem[]> {
         const systemPrompt = this.getAstSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source, y: item.type, n: item.name }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source, y: item.type, n: item.name };
+            return simplified;
+        });
         const results = await this.callGemini(simplifiedItems, systemPrompt, signal);
         return this.mapResultsBack(items, results);
     }
@@ -158,5 +164,54 @@ export class GeminiTranslationService extends BaseProvider {
         const simplifiedItems = items.map(item => ({ i: (item as any).id, s: item.source, y: item.type }));
         const results = await this.callGemini(simplifiedItems, systemPrompt, signal);
         return this.mapResultsBack(items as any[], results) as unknown as ThemeTranslationItem[];
+    }
+
+    /**
+     * Fix API — 修复单条翻译 (Gemini 实现)
+     */
+    protected override async callFixAPI(
+        source: string,
+        target: string,
+        errorMessage: string,
+        systemPrompt: string,
+        signal?: AbortSignal
+    ): Promise<string> {
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        const activeProfile = this.getActiveProfile();
+        const apiKey = activeProfile?.key || settings.llmGeminiKey;
+        const model = this.getModelName();
+
+        if (!apiKey) throw new Error('请先配置 Gemini API Key');
+
+        const userContent = `Source: ${source}\nBroken Translation: ${target}\nError: ${errorMessage}\n\nPlease return ONLY the fixed translation string.`;
+
+        const url = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`;
+        const requestBody = {
+            contents: [{ role: 'user', parts: [{ text: userContent }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            generationConfig: { temperature: 0.2 }
+        };
+
+        const response = await requestUrl({
+            url,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            throw: false
+        });
+
+        if (response.status !== 200) {
+            const errorMsg = response.json?.error?.message || `HTTP ${response.status}`;
+            throw new Error(`Gemini API 错误: ${errorMsg}`);
+        }
+
+        const content = response.json?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!content || content.trim() === '') throw new Error('AI 返回的修复结果为空');
+
+        let cleaned = content.trim();
+        if (cleaned.startsWith('"') && cleaned.endsWith('"')) cleaned = cleaned.slice(1, -1);
+        if (cleaned.startsWith("'") && cleaned.endsWith("'")) cleaned = cleaned.slice(1, -1);
+
+        return cleaned;
     }
 }

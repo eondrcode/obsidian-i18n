@@ -13,7 +13,8 @@ export default {
         Ai: "AI 智能翻译",
         Ast: "AST 编辑",
         Regex: "语法校验",
-        Metadata: "元数据"
+        Metadata: "元数据",
+        ContextPreview: "源码预览"
     },
     Labels: {
         SidebarViewOptions: "视图选项",
@@ -49,7 +50,8 @@ export default {
         ParenthesesCheck: "括号匹配",
         VariableCheck: "变量校验",
         PunctuationCheck: "标点检查",
-        ExpectedConsumption: "预期消耗"
+        ExpectedConsumption: "预期消耗",
+        LineNumber: "行 {{line}}"
     },
     Actions: {
         BatchTranslate: "开始批量翻译 ({{count}})",
@@ -68,7 +70,14 @@ export default {
         RestoreAllErrors: "还原所有异常项",
         Settings: "配置",
         Diagnose: "语法诊断",
-        ClearDiagnose: "清除诊断"
+        UnusedDiagnose: "冗余诊断",
+        SecurityDiagnose: "安全扫描",
+        ClearDiagnose: "清除诊断",
+        StartScan: "开始扫描",
+        AiFix: "AI 修复",
+        AiFixTip: "让 AI 尝试修复此译文的语法错误",
+        ContextAware: "上下文感知",
+        ContextAwareTip: "附加源码上下文以提升翻译准确度"
     },
     Stats: {
         Title: "条目统计",
@@ -116,6 +125,8 @@ export default {
     Status: {
         ProcessingBatch: "正在翻译第 {{current}}/{{total}} 批...",
         Diagnosing: "正在进行语法诊断...",
+        DiagnosingUnused: "正在进行冗余诊断...",
+        DiagnosingSecurity: "正在进行安全审计...",
         Applied: "已应用",
         NotApplied: "未应用",
         Empty: "暂无条目",
@@ -125,7 +136,9 @@ export default {
         ExtractSummary: "增量提取完成，新增 {{count}} 个条目",
         DiagnosisSuccess: "诊断完成：未发现导致语法错误的条目",
         NoItems: "无可翻译项",
-        NoNewItems: "未发现新的翻译条目"
+        NoNewItems: "未发现新的翻译条目",
+        SelectItemToPreview: "选中翻译条目以预览其在源码中的位置",
+        NoSourceCache: "当前文件暂无源码缓存，请先运行一次语法诊断"
     },
     Notices: {
         NoticePrefix: "编辑器",
@@ -134,12 +147,19 @@ export default {
         SuccessRestore: "还原成功",
         SuccessDelete: "删除成功",
         SuccessIncrementalExtract: "增量提取完成",
-        DiagnosisSuccess: "语法诊断通过"
+        DiagnosisSuccess: "语法诊断通过",
+        ConfirmDeleteUnused: "确定删除这些冗余项吗？该操作不可撤销。",
+        AiFixSuccess: "AI 修复成功"
     },
     Errors: {
         FailExists: "新增失败\n译文中已存在此内容",
         SyntaxErrorTotal: "诊断完成：发现 {{count}} 个语法错误",
+        UnusedTotal: "诊断完成：发现 {{count}} 个未匹配的冗余条目",
+        SecurityRiskTotal: "安全预警：发现 {{count}} 个潜在的安全风险",
         SyntaxError: "基础语法错误",
+        Unused: "冗余项 (未在源码中识别到)",
+        SecurityCritical: "严重安全威胁",
+        SecurityWarning: "可疑行为预警",
         BracketMismatch: "括号配对缺失",
         VariableMismatch: "变量占位符丢失或不匹配",
         SyntaxErrorAst: "AST 提取失败",
@@ -150,7 +170,9 @@ export default {
         NoBackup: "诊断异常：未找到对应的备份文件。请先点击一次“替换”以创建基准备份。",
         SourceError: "源码本身存在语法错误，无法进行诊断。",
         FileNotFound: "文件不存在",
-        SavePathMissing: "保存路径不存在"
+        SavePathMissing: "保存路径不存在",
+        TotalCount: "共 {{count}} 项",
+        AiFixFail: "AI 修复失败"
     },
     Dialogs: {
         ConfirmDeletePath: "确认删除该路径？",

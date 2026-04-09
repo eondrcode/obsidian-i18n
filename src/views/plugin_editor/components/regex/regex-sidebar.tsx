@@ -17,7 +17,6 @@ import { RegexInsertCard } from './regex-insert-card';
 import { RegexLLMCard } from './regex-llm-card';
 import { QuickActionsCard } from '../common/quick-actions-card';
 import { DiagnoseCard } from '../common/diagnose-card';
-import { RegexValidationCard } from './regex-validation-card';
 import { useRegexTranslation } from './use-regex-translation';
 import { Library, Settings2 } from 'lucide-react';
 import { DiagnoseError } from '../../types';
@@ -31,12 +30,18 @@ interface Props {
     onDiagnose?: () => void;
     onClearDiagnose?: () => void;
     onRestoreAllErrors?: () => void;
+    onUnusedDiagnose?: () => void;
+    onDeleteUnused?: () => void;
     isDiagnosing?: boolean;
+    isUnusedScan?: boolean;
+    isSecurityScan?: boolean;
+    onSecurityDiagnose?: () => void;
     errorItems?: DiagnoseError[];
     hasChecked?: boolean;
     setActiveTab?: (tab: string) => void;
     isApplied?: boolean;
     onJumpError?: (error: DiagnoseError) => void;
+    onAiFixError?: (error: DiagnoseError) => Promise<void>;
 }
 
 /**
@@ -55,8 +60,14 @@ const RegexSidebar: React.FC<Props> = ({
     setActiveTab,
     onClearDiagnose,
     onRestoreAllErrors,
+    onUnusedDiagnose,
+    onDeleteUnused,
+    isUnusedScan,
+    isSecurityScan,
+    onSecurityDiagnose,
     isApplied,
-    onJumpError
+    onJumpError,
+    onAiFixError
 }) => {
     const { t } = useTranslation();
 
@@ -66,7 +77,6 @@ const RegexSidebar: React.FC<Props> = ({
 
     // View State Management
     const [showStats, setShowStats] = useState(true);
-    const [showValidation, setShowValidation] = useState(true);
     const [showInsert, setShowInsert] = useState(true);
     const [showQuickActions, setShowQuickActions] = useState(true);
     const [showLLM, setShowLLM] = useState(true);
@@ -94,12 +104,6 @@ const RegexSidebar: React.FC<Props> = ({
                             onCheckedChange={setShowStats}
                         >
                             {t('Editor.Stats.Title')}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={showValidation}
-                            onCheckedChange={setShowValidation}
-                        >
-                            {t('Editor.Titles.Regex')}
                         </DropdownMenuCheckboxItem>
                         <DropdownMenuCheckboxItem
                             checked={showInsert}
@@ -130,10 +134,6 @@ const RegexSidebar: React.FC<Props> = ({
                         <RegexStatsCard />
                     )}
 
-                    {showValidation && (
-                        <RegexValidationCard />
-                    )}
-
                     {showInsert && (
                         <RegexInsertCard />
                     )}
@@ -148,13 +148,19 @@ const RegexSidebar: React.FC<Props> = ({
                     )}
                     <DiagnoseCard
                         onDiagnose={onDiagnose!}
+                        onUnusedDiagnose={onUnusedDiagnose}
+                        onSecurityDiagnose={onSecurityDiagnose}
+                        onDeleteUnused={onDeleteUnused}
                         onClear={onClearDiagnose!}
                         onRestoreAllErrors={onRestoreAllErrors}
                         isDiagnosing={isDiagnosing!}
+                        isUnusedScan={isUnusedScan}
+                        isSecurityScan={isSecurityScan}
                         errorItems={errorItems || []}
                         hasChecked={hasChecked}
                         setActiveTab={setActiveTab}
                         onJumpError={onJumpError}
+                        onAiFixError={onAiFixError}
                     />
                     {showLLM && (
                         <RegexLLMCard controller={activeController} />

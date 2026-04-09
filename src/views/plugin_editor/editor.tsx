@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
@@ -18,6 +18,7 @@ import { useGlobalStoreInstance } from '~/utils';
 import { AstTranslator, RegexTranslator, mergeAstItems, mergeRegexItems, mountReactView, StringPicker } from '~/utils';
 import { calculateChecksum } from '@/src/utils/translator/translation';
 import { saveTranslationFile } from '@/src/manager/io-manager';
+import { createTranslationProvider } from '~/ai/provider-factory';
 
 import { useTranslation } from 'react-i18next';
 import { t as gt } from 'src/locales';
@@ -28,6 +29,7 @@ import { MetadataCard } from './components/common/metadata-card';
 import { AstSidebar } from './components/ast/ast-sidebar';
 import { RegexSidebar } from './components/regex/regex-sidebar';
 import { TemplateCard } from './components/common/template-card';
+import { ContextPreview } from './components/common/context-preview';
 
 // ====================================================================================================
 // 子组件 & 辅助功能
@@ -122,11 +124,16 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
     const savingRef = useRef(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDiagnosing, setIsDiagnosing] = useState(false);
+    const [isUnusedScan, setIsUnusedScan] = useState(false);
+    const [isSecurityScan, setIsSecurityScan] = useState(false);
     const [errorItems, setErrorItems] = useState<DiagnoseError[]>([]);
     const [hasChecked, setHasChecked] = useState(false);
     const [activeTab, setActiveTab] = useState('ast');
     const [isAddPathDialogOpen, setIsAddPathDialogOpen] = useState(false);
     const [newPathInput, setNewPathInput] = useState('');
+
+    const astTranslator = useMemo(() => new AstTranslator(i18n.settings), [i18n.settings]);
+    const regexTranslator = useMemo(() => new RegexTranslator(i18n.settings), [i18n.settings]);
 
 
     useEffect(() => {
@@ -398,8 +405,6 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
             }
 
             const results: DiagnoseError[] = [];
-            const astTranslator = new AstTranslator(i18n.settings);
-            const regexTranslator = new RegexTranslator(i18n.settings);
 
             // 2. 深度语法与试运行检测 (物理沙箱重载阶段)
             try {
@@ -437,20 +442,20 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                         const source = item.source || '';
                         const target = item.target || '';
                         if (!astTranslator.validateTargetSyntax(target)) {
-                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.SyntaxError') || '语法错误') + ': ' + target });
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.SyntaxError') || '语法错误') + ': ' + target, severity: 'error' });
                         } else if (!validateBracketBalance(target)) {
-                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target });
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target, severity: 'error' });
                         } else if (!validateVariableConsistency(source, target)) {
-                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target });
+                            results.push({ type: 'ast', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target, severity: 'error' });
                         }
                     }
 
                     for (const item of activeRegexItems) {
                         const target = item.target || '';
                         if (!validateBracketBalance(target)) {
-                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target });
+                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.BracketMismatch') || '括号不匹配') + ': ' + target, severity: 'error' });
                         } else if (!validateVariableConsistency(item.source || '', target)) {
-                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target });
+                            results.push({ type: 'regex', id: item.id, source: (t('Editor.Errors.VariableMismatch') || '变量丢失') + ': ' + target, severity: 'error' });
                         }
                     }
 
@@ -562,17 +567,213 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
         }
     }, [i18n, notice, t, isDiagnosing]);
 
+    const handleSecurityDiagnose = React.useCallback(async () => {
+        if (isDiagnosing) return;
+        setIsDiagnosing(true);
+        setIsUnusedScan(false);
+        setIsSecurityScan(true);
+        setErrorItems([]);
+        setHasChecked(true);
+
+        try {
+            const { regexItems, astItems } = useRegexStore.getState();
+            const results: DiagnoseError[] = [];
+
+            // 1. 扫描 AST 条目
+            for (const item of astItems) {
+                const target = item.target || '';
+                const issues = astTranslator.validateSecurity(target);
+                for (const issue of issues) {
+                    results.push({
+                        type: 'ast',
+                        id: item.id as any,
+                        source: target,
+                        severity: issue.severity,
+                        message: issue.message
+                    });
+                }
+            }
+
+            // 2. 扫描 Regex 条目
+            for (const item of regexItems) {
+                const source = item.source || '';
+                const target = item.target || '';
+                const issues = regexTranslator.validateSecurity(target, source);
+                for (const issue of issues) {
+                    results.push({
+                        type: 'regex',
+                        id: item.id,
+                        source: target,
+                        severity: issue.severity,
+                        message: issue.message
+                    });
+                }
+            }
+
+            setErrorItems(results);
+            if (results.length === 0) {
+                notice.success(t('Editor.Notices.DiagnosisSuccess'));
+            } else {
+                notice.error(t('Editor.Errors.SecurityRiskTotal', { count: results.length }));
+            }
+        } catch (e) {
+            notice.error(t('Common.Status.Failure') + ': ' + e);
+        } finally {
+            setIsDiagnosing(false);
+        }
+    }, [notice, t, isDiagnosing]);
+
+    const handleUnusedDiagnose = React.useCallback(async () => {
+        if (isDiagnosing) return;
+        setIsDiagnosing(true);
+        setIsUnusedScan(true);
+        setIsSecurityScan(false);
+        setErrorItems([]);
+        setHasChecked(true);
+
+        try {
+            const { regexItems, astItems, metadata, currentFile, sourceCache, setSourceCache } = useRegexStore.getState();
+            if (!metadata) {
+                notice.error(t('Editor.Errors.NoMetadata'));
+                return;
+            }
+
+            const pluginId = metadata.plugin;
+
+            if (!currentFile || !currentFile.endsWith('.js')) {
+                notice.info(t('Editor.Errors.NotJs'));
+                return;
+            }
+
+            // 获取源代码 (逻辑同 handleDiagnose)
+            const state = i18n.stateManager.getPluginState(pluginId);
+            const isApplied = !!(state && state.isApplied);
+            let originalCode: string | null = sourceCache[currentFile];
+            if (!originalCode) {
+                if (!isApplied) {
+                    try {
+                        // @ts-ignore
+                        const manifest = i18n.app.plugins.manifests[pluginId];
+                        if (manifest) {
+                            // @ts-ignore
+                            const basePath = path.normalize(i18n.app.vault.adapter.getBasePath());
+                            const pluginDir = path.join(basePath, manifest.dir || '');
+                            const targetFilePath = path.join(pluginDir, currentFile);
+                            if (fs.existsSync(targetFilePath)) {
+                                originalCode = fs.readFileSync(targetFilePath, 'utf8');
+                            }
+                        }
+                    } catch (e) { }
+                }
+                if (!originalCode) {
+                    originalCode = await i18n.backupManager.getBackupContent(pluginId, currentFile);
+                }
+                if (originalCode) {
+                    setSourceCache(currentFile, originalCode);
+                }
+            }
+
+            if (!originalCode) {
+                notice.error(t('Editor.Errors.NoBackup'));
+                return;
+            }
+
+            const results: DiagnoseError[] = [];
+            const astTranslator = new AstTranslator(i18n.settings);
+            const regexTranslator = new RegexTranslator(i18n.settings);
+
+            // 1. AST 冗余诊断
+            const baseAst = astTranslator.loadCode(originalCode);
+            if (baseAst) {
+                const hitFingerprints = astTranslator.traceUsage(baseAst, astItems);
+
+                // 为了精确匹配，我们需要再次遍历 astItems
+                astItems.forEach(item => {
+                    // 获取指纹 (严格模式)
+                    const fingerprint = `${item.type}:${item.name}:${item.source}`;
+                    const isHit = hitFingerprints.has(fingerprint) || hitFingerprints.has(item.source);
+
+                    if (!isHit) {
+                        results.push({
+                            type: 'ast',
+                            id: item.id,
+                            source: item.source,
+                            isUnused: true
+                        });
+                    }
+                });
+            }
+
+            // 2. Regex 冗余诊断
+            const hitSources = regexTranslator.traceUsage(originalCode, regexItems);
+            regexItems.forEach(item => {
+                if (!hitSources.has(item.source)) {
+                    results.push({
+                        type: 'regex',
+                        id: item.id,
+                        source: item.source,
+                        isUnused: true
+                    });
+                }
+            });
+
+            setErrorItems(results);
+            if (results.length === 0) {
+                notice.success(t('Editor.Notices.DiagnosisSuccess'));
+            } else {
+                notice.info(t('Editor.Errors.UnusedTotal', { count: results.length }));
+            }
+        } catch (e) {
+            notice.error(t('Common.Status.Failure') + ': ' + e);
+        } finally {
+            setIsDiagnosing(false);
+        }
+    }, [i18n, notice, t, isDiagnosing]);
+
     const handleClearDiagnose = React.useCallback(() => {
         setErrorItems([]);
         setHasChecked(false);
+        setIsUnusedScan(false);
+    }, []);
+
+    const handleDeleteUnused = React.useCallback(() => {
+        const unusedItems = errorItems.filter(i => i.isUnused);
+        if (unusedItems.length === 0) return;
+
+        if (!confirm(t('Editor.Notices.ConfirmDeleteUnused') || `确认删除这 ${unusedItems.length} 个冗余项吗？`)) return;
+
+        const { astItems, regexItems } = useRegexStore.getState();
+
+        const unusedAstIds = new Set(unusedItems.filter(i => i.type === 'ast').map(i => i.id));
+        const unusedRegexIds = new Set(unusedItems.filter(i => i.type === 'regex').map(i => i.id));
+
+        const newAstItems = astItems.filter(i => !unusedAstIds.has(i.id));
+        const newRegexItems = regexItems.filter(i => !unusedRegexIds.has(i.id));
+
+        // 重新分配 ID 保证连续性
+        setAstItems(newAstItems.map((item, index) => ({ ...item, id: index })));
+        setRegexItems(newRegexItems.map((item, index) => ({ ...item, id: index })));
+
+        setErrorItems([]);
+        setHasChecked(false);
+        setIsUnusedScan(false);
+        notice.success(t('Editor.Notices.SuccessDelete'));
+    }, [errorItems, notice, t, setAstItems, setRegexItems]);
+
+    const handleJumpError = React.useCallback((error: DiagnoseError) => {
+        setActiveTab(error.type);
+        // 通过 CustomEvent 触发表格滚动定位 (由子组件监听)
+        window.dispatchEvent(new CustomEvent('i18n-jump-error', {
+            detail: { type: error.type, id: error.id }
+        }));
     }, []);
 
     const handleRestoreAllErrors = React.useCallback(() => {
         if (errorItems.length === 0) return;
-        
+
         const newAstItems = [...useRegexStore.getState().astItems];
         const newRegexItems = [...useRegexStore.getState().regexItems];
-        
+
         errorItems.forEach(error => {
             if (error.type === 'ast') {
                 const idx = newAstItems.findIndex(i => i.id === error.id);
@@ -586,13 +787,59 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                 }
             }
         });
-        
+
         setAstItems(newAstItems);
         setRegexItems(newRegexItems);
         setErrorItems([]);
         setHasChecked(false);
         notice.success(t('Editor.Notices.SuccessRestore'));
     }, [errorItems, notice, t, setAstItems, setRegexItems]);
+
+    // AI 修复单条错误项
+    const handleAiFixError = React.useCallback(async (error: DiagnoseError) => {
+        try {
+            // 从 store 中获取当前 target（DiagnoseError 没有 target 字段）
+            const state = useRegexStore.getState();
+            let currentTarget = '';
+            if (error.type === 'ast') {
+                const item = state.astItems.find(i => i.id === error.id);
+                currentTarget = item?.target || error.source;
+            } else {
+                const item = state.regexItems.find(i => i.id === error.id);
+                currentTarget = item?.target || error.source;
+            }
+
+            const provider = createTranslationProvider();
+            const fixedTarget = await provider.fixTranslation(
+                error.source,
+                currentTarget,
+                error.message || '语法错误'
+            );
+
+            // 更新对应的翻译条目
+            if (error.type === 'ast') {
+                const currentAstItems = useRegexStore.getState().astItems;
+                const updated = currentAstItems.map(item =>
+                    item.id === error.id ? { ...item, target: fixedTarget } : item
+                );
+                setAstItems(updated);
+            } else {
+                const currentRegexItems = useRegexStore.getState().regexItems;
+                const updated = currentRegexItems.map(item =>
+                    item.id === error.id ? { ...item, target: fixedTarget } : item
+                );
+                setRegexItems(updated);
+            }
+
+            // 从 errorItems 中移除已修复的项
+            setErrorItems(prev => prev.filter(e => !(e.id === error.id && e.type === error.type)));
+
+            notice.success(t('Editor.Notices.AiFixSuccess'));
+        } catch (err: any) {
+            console.error('[AI Fix] 修复失败:', err);
+            notice.error(`${t('Editor.Errors.AiFixFail')}: ${err.message}`);
+        }
+    }, [notice, t, setAstItems, setRegexItems, setErrorItems]);
 
     // 快捷键: Ctrl + S 保存
     useEffect(() => {
@@ -609,6 +856,13 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
             window.removeEventListener('keydown', handleKeyDown, true);
         };
     }, [save]);
+
+    // 广播诊断错误到表格组件，用于行高亮
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent('i18n-diagnose-errors', {
+            detail: { errors: errorItems }
+        }));
+    }, [errorItems]);
 
     const metadata = useRegexStore.use.metadata();
     const dictData = useRegexStore.use.dictData();
@@ -632,20 +886,14 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
 
     const switchFile = (file: string) => {
         if (file === currentFile) return;
-        // 先同步当前输入
-        useRegexStore.getState().syncFileDictInfo(
-            useRegexStore.getState().currentFile,
-            useRegexStore.getState().astItems,
-            useRegexStore.getState().regexItems
-        );
-        // 再切换
+        // 直接切换，setCurrentFile 内部现在会原子化处理进度保存和新数据加载
         setCurrentFile(file);
     };
 
     // ================================================== Render ================================================== 
     return (
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col gap-0 bg-background/50 backdrop-blur-md">
-            <AutoSaveManager onSave={save} enabled={!!i18n.settings.autoSave} />
+            <AutoSaveManager key={currentFile} onSave={save} enabled={!!i18n.settings.autoSave} />
             <ResizablePanelGroup direction="horizontal" className="h-full border-none">
                 {/* 左侧资源管理侧边栏 */}
                 <ResizablePanel defaultSize={20} minSize={10} maxSize={30} className="h-full">
@@ -714,6 +962,9 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                                                                 e.stopPropagation();
                                                                 if (confirm(t('Editor.Dialogs.ConfirmDeletePath'))) {
                                                                     deleteFile(file);
+                                                                    // 清理对应的诊断状态，防止旧数据的错误干扰新文件的编辑
+                                                                    setErrorItems([]);
+                                                                    setHasChecked(false);
                                                                 }
                                                             }}
                                                         >
@@ -737,21 +988,32 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
 
                 {/* 中间：主内容编辑器区 */}
                 <ResizablePanel defaultSize={60} minSize={30} className="h-full">
-                    <main className="w-full h-full flex flex-col px-1 overflow-hidden bg-background/20">
-                        {/* 主编辑视图 */}
-                        <div className="flex-1 min-h-0 overflow-hidden relative">
-                            <TabsContent value="ast" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
-                                <div className="h-full overflow-auto p-2 pt-0">
-                                    <AstEditor />
+                    <ResizablePanelGroup direction="vertical" className="h-full">
+                        {/* 上方：翻译表格 */}
+                        <ResizablePanel defaultSize={75} minSize={40}>
+                            <main className="w-full h-full flex flex-col px-1 overflow-hidden bg-background/20">
+                                <div className="flex-1 min-h-0 overflow-hidden relative">
+                                    <TabsContent value="ast" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
+                                        <div className="h-full overflow-auto p-2 pt-0">
+                                            <AstEditor />
+                                        </div>
+                                    </TabsContent>
+                                    <TabsContent value="regex" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
+                                        <div className="h-full overflow-auto p-2 pt-0">
+                                            <RegexEditor />
+                                        </div>
+                                    </TabsContent>
                                 </div>
-                            </TabsContent>
-                            <TabsContent value="regex" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
-                                <div className="h-full overflow-auto p-2 pt-0">
-                                    <RegexEditor />
-                                </div>
-                            </TabsContent>
-                        </div>
-                    </main>
+                            </main>
+                        </ResizablePanel>
+
+                        <ResizableHandle withHandle />
+
+                        {/* 下方：源码预览面板 */}
+                        <ResizablePanel defaultSize={25} minSize={10} maxSize={50}>
+                            <ContextPreview />
+                        </ResizablePanel>
+                    </ResizablePanelGroup>
                 </ResizablePanel>
 
                 <ResizableHandle withHandle />
@@ -767,13 +1029,20 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                                     translationEntries={astItems as any}
                                     onOpenFile={handleOpenFile}
                                     onDiagnose={handleDiagnose}
+                                    onUnusedDiagnose={handleUnusedDiagnose}
+                                    onSecurityDiagnose={handleSecurityDiagnose}
+                                    onDeleteUnused={handleDeleteUnused}
                                     onClearDiagnose={handleClearDiagnose}
                                     onRestoreAllErrors={handleRestoreAllErrors}
                                     isDiagnosing={isDiagnosing}
+                                    isUnusedScan={isUnusedScan}
+                                    isSecurityScan={isSecurityScan}
                                     errorItems={errorItems}
                                     hasChecked={hasChecked}
                                     setActiveTab={setActiveTab}
                                     isApplied={isApplied}
+                                    onJumpError={handleJumpError}
+                                    onAiFixError={handleAiFixError}
                                 />
                             </TabsContent>
                             <TabsContent value="regex" className="flex-1 min-h-0 m-0 overflow-hidden outline-none">
@@ -782,13 +1051,20 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
                                     onIncrementalExtract={incrementalExtractRegex}
                                     onOpenFile={handleOpenFile}
                                     onDiagnose={handleDiagnose}
+                                    onUnusedDiagnose={handleUnusedDiagnose}
+                                    onSecurityDiagnose={handleSecurityDiagnose}
+                                    onDeleteUnused={handleDeleteUnused}
                                     onClearDiagnose={handleClearDiagnose}
                                     onRestoreAllErrors={handleRestoreAllErrors}
                                     isDiagnosing={isDiagnosing}
+                                    isUnusedScan={isUnusedScan}
+                                    isSecurityScan={isSecurityScan}
                                     errorItems={errorItems}
                                     hasChecked={hasChecked}
                                     setActiveTab={setActiveTab}
                                     isApplied={isApplied}
+                                    onJumpError={handleJumpError}
+                                    onAiFixError={handleAiFixError}
                                 />
                             </TabsContent>
                         </div>

@@ -7,6 +7,7 @@ import { t } from "@/src/locales";
 import { STYLES } from '~/constants/llm-options';
 import { SUPPORTED_LANGUAGES } from '~/constants/languages';
 
+
 export const useAstTranslation = () => {
     const astItems = useRegexStore.use.astItems();
     const updateAstItems = useRegexStore.use.updateAstItems();
@@ -18,6 +19,7 @@ export const useAstTranslation = () => {
     const [batchSize, setBatchSize] = useState(i18n.settings.llmBatchSize?.toString() || '20');
     const [concurrencyLimit, setConcurrencyLimit] = useState(i18n.settings.llmConcurrencyLimit?.toString() || '3');
     const [overwrite, setOverwrite] = useState(false);
+
     const [inputError, setInputError] = useState(false);
     const [concurrencyError, setConcurrencyError] = useState(false);
     const [timeout, setTimeoutVal] = useState(i18n.settings.llmTimeout?.toString() || '60000');
@@ -167,6 +169,8 @@ export const useAstTranslation = () => {
         abortControllerRef.current = new AbortController();
 
         try {
+
+
             const op = createTranslationProvider();
             await op.astTranslate(
                 targetItems,
@@ -212,6 +216,7 @@ export const useAstTranslation = () => {
             batchSize,
             concurrencyLimit,
             overwrite,
+
             inputError,
             concurrencyError,
             isTranslating,
@@ -234,6 +239,7 @@ export const useAstTranslation = () => {
             setBatchSize: handleBatchSizeChange, // Note: this is change handler, not setter
             setConcurrencyLimit: handleConcurrencyLimitChange,
             setOverwrite,
+
             handleTimeoutChange,
             handleBatchSizeBlur,
             handleConcurrencyLimitBlur,

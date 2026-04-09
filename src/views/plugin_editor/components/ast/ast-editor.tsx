@@ -36,6 +36,12 @@ const AstEditor: React.FC<Props> = () => {
         astItemsRef.current = astItems;
     }, [astItems]);
 
+    // Cleanup when file switches
+    const currentFile = useRegexStore.use.currentFile();
+    React.useEffect(() => {
+        setEditingId(null);
+    }, [currentFile]);
+
     React.useEffect(() => {
         const handleJump = (e: CustomEvent<{ type: string, id: number }>) => {
             if (e.detail.type === 'ast') {
@@ -74,6 +80,25 @@ const AstEditor: React.FC<Props> = () => {
         }
         return items;
     }, [astItems, deferredSearchQuery, deferredFilterType]);
+
+    // 广播选中项给预览面板
+    React.useEffect(() => {
+        if (editingId !== null) {
+            const item = astItems.find(i => i.id === editingId);
+            if (item) {
+                window.dispatchEvent(new CustomEvent('i18n-item-selected', {
+                    detail: {
+                        source: item.source,
+                        type: 'ast' as const,
+                        name: item.name,
+                        astType: item.type
+                    }
+                }));
+            }
+        } else {
+            window.dispatchEvent(new CustomEvent('i18n-item-deselected'));
+        }
+    }, [editingId, astItems]);
 
     // 稳定化回调
     const handleRowClick = useCallback((id: number) => {
@@ -118,6 +143,7 @@ const AstEditor: React.FC<Props> = () => {
                 {/* AST条目表格 */}
                 <div className="flex-1 overflow-hidden h-full">
                     <ASTTable
+                        key={currentFile}
                         data={filteredItems}
                         editingId={editingId}
                         onRowClick={handleRowClick}

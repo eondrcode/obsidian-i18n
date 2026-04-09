@@ -120,6 +120,116 @@ export class AstTranslator {
     }
 
     /**
+     * 跟踪翻译项的使用情况
+     * 模拟翻译过程，记录哪些翻译项在源码中找到了匹配点
+     */
+    public traceUsage(ast: t.Node, translations: PluginTranslationV1Ast[]): Set<string> {
+        const hitFingerprints = new Set<string>();
+
+        // 1. 构建查找表
+        const strictMap = new Map<string, string>(); // fingerprint -> target
+        const looseMap = new Map<string, string>();  // source -> target
+
+        translations.forEach(item => {
+            if (item.type && item.name) {
+                strictMap.set(this.getFingerprint(item), item.target);
+            }
+            looseMap.set(item.source, item.target);
+        });
+
+        // 2. 遍历所有匹配项
+        this.traverseAllStrings(ast, (type, name, valueNode) => {
+            const source = this.extractSource(valueNode);
+            if (!source) return;
+
+            const fingerprint = this.getFingerprint({ type, name, source } as any);
+            if (strictMap.has(fingerprint)) {
+                hitFingerprints.add(fingerprint);
+            } else if (looseMap.has(source)) {
+                // 如果严格匹配失败但宽松匹配成功，记录下宽松匹配的标示
+                hitFingerprints.add(source);
+            }
+        });
+
+        return hitFingerprints;
+    }
+
+
+    /**
+     * 验证目标内容的安全性 (精准版)
+     * @param target 目标翻译字符串
+     * @returns { severity: string, message: string }[]
+     */
+    public validateSecurity(target: string): { severity: 'critical' | 'warning', message: string }[] {
+        const issues: { severity: 'critical' | 'warning', message: string }[] = [];
+        if (!target) return issues;
+
+        // 1. 致命威胁检测 (注入 & 执行)
+        // 使用 \b 确保是完整的单词，避免误报 "Fetch data"
+        const criticalPatterns = [
+            { regex: /\beval\s*\(/i, name: 'eval()' },
+            { regex: /\bFunction\s*\(/i, name: 'new Function()' },
+            { regex: /\bsetTimeout\s*\(\s*['"`]/i, name: 'setTimeout(string)' },
+            { regex: /\bsetInterval\s*\(\s*['"`]/i, name: 'setInterval(string)' },
+            { regex: /<script/i, name: '<script>' },
+            { regex: /\bjavascript:/i, name: 'javascript:' },
+        ];
+
+        for (const pattern of criticalPatterns) {
+            if (pattern.regex.test(target)) {
+                issues.push({
+                    severity: 'critical',
+                    message: `发现危险的执行指令: ${pattern.name}`
+                });
+            }
+        }
+
+        // 2. 可疑行为检测 (网络 & 敏感环境)
+        const warningPatterns = [
+            { regex: /\bfetch\s*\(/i, name: 'fetch()' },
+            { regex: /\bXMLHttpRequest\b/i, name: 'XMLHttpRequest' },
+            { regex: /\bWebSocket\b/i, name: 'WebSocket' },
+            { regex: /\brequire\s*\(/i, name: 'require()' },
+            { regex: /\bprocess\./i, name: 'Node.js process' },
+            { regex: /\belectron\./i, name: 'Electron API' },
+            { regex: /\blocalStorage\b/i, name: 'localStorage' },
+            { regex: /\bdocument\.cookie\b/i, name: 'document.cookie' },
+        ];
+
+        for (const pattern of warningPatterns) {
+            if (pattern.regex.test(target)) {
+                issues.push({
+                    severity: 'warning',
+                    message: `发现可疑的代码模式: ${pattern.name}`
+                });
+            }
+        }
+
+        // 3. 模板字面量深度审计 (检查 ${...} 中是否包含代码逻辑)
+        if (target.includes('${')) {
+            try {
+                const safeTarget = target.replace(/`/g, '\\`');
+                const expr = parseExpression('`' + safeTarget + '`');
+                if (t.isTemplateLiteral(expr)) {
+                    for (const expression of expr.expressions) {
+                        // 如果表达式不是简单的 Identifier 或 MemberExpression，则视为风险
+                        if (!t.isIdentifier(expression) && !t.isMemberExpression(expression)) {
+                            issues.push({
+                                severity: 'warning',
+                                message: `模板字符串包含复杂的执行逻辑: ${generate(expression).code}`
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                // 如果解析失败，说明可能是畸形的语法，这通常在 validateTargetSyntax 中处理
+            }
+        }
+
+        return issues;
+    }
+
+    /**
      * 验证目标翻译内容的语法合法性
      * @param target 目标翻译字符串
      * @returns boolean 是否合法

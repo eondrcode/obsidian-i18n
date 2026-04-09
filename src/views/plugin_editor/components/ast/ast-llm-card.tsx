@@ -1,4 +1,4 @@
-import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Progress, Checkbox, Badge } from '@/src/shadcn';
+import { Button, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Progress, Checkbox, Badge, Tooltip, TooltipTrigger, TooltipContent } from '@/src/shadcn';
 import { STYLES } from '@/src/constants/llm-options';
 import { SUPPORTED_LANGUAGES } from '@/src/constants/languages';
 import { TemplateCard } from '../common/template-card';

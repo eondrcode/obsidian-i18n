@@ -115,11 +115,96 @@ export class RegexTranslator {
 
 
     /**
-     * 使用正则表达式提取代码中的翻译条目
-     * 
-     * @param code 要提取翻译条目的代码
-     * @returns 提取到的翻译条目数组
+     * 验证翻译项安全性 (精准版)
+     * @param target 目标翻译字符串
+     * @param source 原始代码匹配出的原文 (用于上下文分析)
      */
+    public validateSecurity(target: string, source: string = ""): { severity: 'critical' | 'warning', message: string }[] {
+        const issues: { severity: 'critical' | 'warning', message: string }[] = [];
+        if (!target) return issues;
+
+        // 1. 精准结构破坏检测 (仅当包含可能导致当前容器闭合的引号且未转义时报错)
+        // 尝试从 source 中探测包裹引号
+        const trimmedSource = source.trim();
+        const startChar = trimmedSource[0];
+        const endChar = trimmedSource[trimmedSource.length - 1];
+
+        // 只有当原文被引号包裹时，才需要检查同名引号的溢出
+        const quotes = ['"', "'", '`'];
+        if (quotes.includes(startChar) && startChar === endChar) {
+            const quoteName = startChar === '"' ? '双引号' : (startChar === "'" ? '单引号' : '反引号');
+
+            const hasUnescapedQuote = (str: string, q: string) => {
+                let escaped = false;
+                for (let i = 0; i < str.length; i++) {
+                    if (str[i] === '\\') {
+                        escaped = !escaped;
+                    } else if (str[i] === q) {
+                        if (!escaped) return true;
+                        escaped = false;
+                    } else {
+                        escaped = false;
+                    }
+                }
+                return false;
+            };
+
+            if (hasUnescapedQuote(target, startChar)) {
+                issues.push({
+                    severity: 'warning',
+                    message: `潜在的结构破坏风险: 包含未转义的${quoteName}，可能导致代码逃逸`
+                });
+
+                // 特殊检查：分号通常紧随引号闭合后，如果包含分号且包含引号，风险更高
+                if (target.includes(';')) {
+                    issues.push({
+                        severity: 'critical',
+                        message: `高危结构破坏风险: 检测到引号配对与分号组合，可能存在指令注入`
+                    });
+                }
+            }
+        }
+
+        // 2. 指令级精确匹配 (使用 \b 单词边界)
+        const criticalPatterns = [
+            { regex: /\beval\s*\(/i, name: 'eval()' },
+            { regex: /\bFunction\s*\(/i, name: 'new Function()' },
+            { regex: /\bsetTimeout\s*\(\s*['"`]/i, name: 'setTimeout(string)' },
+            { regex: /<script/i, name: '<script>' },
+            { regex: /\bjavascript:/i, name: 'javascript:' },
+        ];
+
+        for (const pattern of criticalPatterns) {
+            if (pattern.regex.test(target)) {
+                issues.push({
+                    severity: 'critical',
+                    message: `发现危险的执行指令: ${pattern.name}`
+                });
+            }
+        }
+
+        // 3. 可疑行为检测
+        const warningKeywords = [
+            { regex: /\bfetch\s*\(/i, name: 'fetch()' },
+            { regex: /\bXMLHttpRequest\b/i, name: 'XMLHttpRequest' },
+            { regex: /\brequire\s*\(/i, name: 'require()' },
+            { regex: /\bprocess\./i, name: 'Node.js process' },
+            { regex: /\belectron\./i, name: 'Electron API' },
+            { regex: /\blocalStorage\b/i, name: 'localStorage' },
+        ];
+
+        for (const kw of warningKeywords) {
+            if (kw.regex.test(target)) {
+                issues.push({
+                    severity: 'warning',
+                    message: `内容包含可疑敏感操作: ${kw.name}`
+                });
+            }
+        }
+
+        return issues;
+    }
+
     public extractTranslationsByRegex(code: string): PluginTranslationV1Regex[] {
         const translations: PluginTranslationV1Regex[] = [];
         // 用Set存储已添加的source，优化去重效率（O(1)查找）
@@ -156,6 +241,22 @@ export class RegexTranslator {
             }
         }
         return translatedCode;
+    }
+
+    /**
+     * 跟踪正则项的使用情况
+     * @param code 源代码
+     * @param translations 翻译项
+     * @returns 被命中的翻译项 source 集合
+     */
+    public traceUsage(code: string, translations: PluginTranslationV1Regex[]): Set<string> {
+        const hitSources = new Set<string>();
+        for (const item of translations) {
+            if (item.source && code.includes(item.source)) {
+                hitSources.add(item.source);
+            }
+        }
+        return hitSources;
     }
 
     /**

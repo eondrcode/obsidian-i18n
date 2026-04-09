@@ -18,6 +18,7 @@ import {
     DEFAULT_REGEX_PROMPT_TEMPLATE, generateRegexSystemPrompt,
     DEFAULT_AST_PROMPT_TEMPLATE, generateAstSystemPrompt,
     DEFAULT_THEME_PROMPT_TEMPLATE, generateThemeSystemPrompt,
+    generateFixSystemPrompt,
 } from './prompts';
 
 export abstract class BaseProvider implements ITranslationProvider {
@@ -239,5 +240,27 @@ export abstract class BaseProvider implements ITranslationProvider {
             }
             return { ...item, target };
         });
+    }
+
+    // ======================== Fix (修复) 功能 ========================
+
+    /** 子类可覆写：调用具体 API 修复单条翻译 */
+    protected async callFixAPI(source: string, target: string, errorMessage: string, systemPrompt: string, signal?: AbortSignal): Promise<string> {
+        // 默认实现：抛出未实现异常，子类应覆写
+        throw new Error('fixTranslation is not implemented for this provider');
+    }
+
+    /** 生成 Fix System Prompt */
+    protected getFixSystemPrompt(): string {
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        return generateFixSystemPrompt(settings.llmLanguage);
+    }
+
+    /**
+     * 修复单条翻译 (公共接口实现)
+     */
+    public async fixTranslation(source: string, target: string, errorMessage: string): Promise<string> {
+        const systemPrompt = this.getFixSystemPrompt();
+        return this.callFixAPI(source, target, errorMessage, systemPrompt);
     }
 }

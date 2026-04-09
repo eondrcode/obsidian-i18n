@@ -28,6 +28,9 @@ export type DiagnoseError = {
     type: 'ast' | 'regex';
     id: number;
     source: string;
+    isUnused?: boolean;
+    severity?: 'error' | 'warning' | 'critical';
+    message?: string;
 };
 
 // ======================== Slice Interfaces ========================

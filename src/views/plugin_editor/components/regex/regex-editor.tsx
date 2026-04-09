@@ -37,6 +37,14 @@ const RegexEditor: React.FC<Props> = () => {
         regexItemsRef.current = regexItems;
     }, [regexItems]);
 
+    // Cleanup when file switches
+    const currentFile = useRegexStore.use.currentFile();
+    React.useEffect(() => {
+        setEditingId(null);
+        setFilterType('all');
+        setSearchQuery('');
+    }, [currentFile, setSearchQuery]);
+
     React.useEffect(() => {
         const handleJump = (e: CustomEvent<{ type: string, id: number }>) => {
             if (e.detail.type === 'regex') {
@@ -74,6 +82,23 @@ const RegexEditor: React.FC<Props> = () => {
         return items;
     }, [regexItems, deferredSearchQuery, deferredFilterType]);
 
+    // 广播选中项给预览面板
+    React.useEffect(() => {
+        if (editingId !== null) {
+            const item = regexItems.find(i => i.id === editingId);
+            if (item) {
+                window.dispatchEvent(new CustomEvent('i18n-item-selected', {
+                    detail: {
+                        source: item.source,
+                        type: 'regex' as const,
+                    }
+                }));
+            }
+        } else {
+            window.dispatchEvent(new CustomEvent('i18n-item-deselected'));
+        }
+    }, [editingId, regexItems]);
+
     const handleFilterChange = useCallback((v: string) => {
         setFilterType(v as FilterType);
     }, []);
@@ -104,7 +129,7 @@ const RegexEditor: React.FC<Props> = () => {
 
                 {/* 表格内容区域 */}
                 <div className="flex-1 overflow-hidden">
-                    <RegexTable data={filteredItems} editingId={editingId} onEditingIdChange={setEditingId} />
+                    <RegexTable key={currentFile} data={filteredItems} editingId={editingId} onEditingIdChange={setEditingId} />
                 </div>
             </div>
         </div>

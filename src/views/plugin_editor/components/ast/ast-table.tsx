@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     TableHead,
@@ -16,7 +16,7 @@ import {
     useReactTable,
 } from "@tanstack/react-table";
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { AstItem } from '../../types';
+import { AstItem, DiagnoseError } from '../../types';
 import { ASTTableEmptyState } from './ast-table-empty-state';
 import { useRegexStore } from '../../store';
 
@@ -93,13 +93,22 @@ interface MemoizedAstRowProps {
     onRowClick: (id: number) => void;
     getCellClass: (columnId: string) => string;
     dataIndex: number;
+    errorType?: 'error' | 'unused' | 'security' | null;
 }
 
+const errorRowStyles: Record<string, string> = {
+    error: 'bg-destructive/8 border-l-2 border-l-destructive',
+    unused: 'bg-orange-500/8 border-l-2 border-l-orange-500',
+    security: 'bg-purple-500/8 border-l-2 border-l-purple-500',
+};
+
 const MemoizedAstRowInner = React.forwardRef<HTMLTableRowElement, MemoizedAstRowProps>(
-    ({ row, isSelected, onRowClick, getCellClass, dataIndex }, ref) => {
+    ({ row, isSelected, onRowClick, getCellClass, dataIndex, errorType }, ref) => {
         const handleClick = useCallback(() => {
             onRowClick(row.original.id);
         }, [row.original.id, onRowClick]);
+
+        const errorClass = errorType ? errorRowStyles[errorType] || '' : '';
 
         return (
             <TableRow
@@ -107,7 +116,7 @@ const MemoizedAstRowInner = React.forwardRef<HTMLTableRowElement, MemoizedAstRow
                 data-index={dataIndex}
                 id={`ast-row-${row.original.id}`}
                 data-state={isSelected ? "selected" : undefined}
-                className={`cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''}`}
+                className={`cursor-pointer hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''} ${errorClass}`}
                 onClick={handleClick}
             >
                 {row.getVisibleCells().map((cell: any) => (
@@ -126,13 +135,36 @@ MemoizedAstRowInner.displayName = 'MemoizedAstRow';
 
 const MemoizedAstRow = React.memo(MemoizedAstRowInner, (prev, next) => {
     return prev.isSelected === next.isSelected
-        && prev.row.original === next.row.original;
+        && prev.row.original === next.row.original
+        && prev.errorType === next.errorType;
 });
 
 export const ASTTable = React.forwardRef<HTMLDivElement, Props>(({ data, editingId, onRowClick, onDelete, onReset }, ref) => {
     const { t } = useTranslation();
     const updateAstItem = useRegexStore.use.updateAstItem();
     const parentRef = useRef<HTMLDivElement>(null);
+
+    // 诊断错误高亮映射 {id -> errorType}
+    const [errorMap, setErrorMap] = useState<Map<number, 'error' | 'unused' | 'security'>>(new Map());
+
+    useEffect(() => {
+        const handleErrors = (e: CustomEvent<{ errors: DiagnoseError[] }>) => {
+            const map = new Map<number, 'error' | 'unused' | 'security'>();
+            for (const err of e.detail.errors) {
+                if (err.type !== 'ast') continue;
+                if (err.severity === 'critical' || err.severity === 'warning') {
+                    map.set(err.id, 'security');
+                } else if (err.isUnused) {
+                    map.set(err.id, 'unused');
+                } else {
+                    map.set(err.id, 'error');
+                }
+            }
+            setErrorMap(map);
+        };
+        window.addEventListener('i18n-diagnose-errors', handleErrors as EventListener);
+        return () => window.removeEventListener('i18n-diagnose-errors', handleErrors as EventListener);
+    }, []);
 
     const columns = useMemo<ColumnDef<AstItem>[]>(
         () => [
@@ -258,7 +290,11 @@ export const ASTTable = React.forwardRef<HTMLDivElement, Props>(({ data, editing
         if (columnId === 'type' || columnId === 'name') {
             return "w-[1%] whitespace-nowrap p-2";
         }
-        return "p-2";
+        if (columnId === 'actions') {
+            return "w-[1%] whitespace-nowrap p-2";
+        }
+        // source & target 用相同百分比强制等宽
+        return "w-[38%] p-2";
     }, []);
 
     // Check for empty data
@@ -315,6 +351,7 @@ export const ASTTable = React.forwardRef<HTMLDivElement, Props>(({ data, editing
                                     isSelected={row.original.id === editingId}
                                     onRowClick={onRowClick}
                                     getCellClass={getCellClass}
+                                    errorType={errorMap.get(row.original.id) || null}
                                 />
                             );
                         })}

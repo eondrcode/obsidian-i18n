@@ -139,14 +139,20 @@ export class OllamaTranslationService extends BaseProvider {
 
     protected async callRegexTranslationAPI(items: RegexItem[], signal?: AbortSignal): Promise<RegexItem[]> {
         const systemPrompt = this.getRegexSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source };
+            return simplified;
+        });
         const results = await this.callOllama(simplifiedItems, systemPrompt, signal);
         return this.mapResultsBack(items, results);
     }
 
     protected async callAstTranslationAPI(items: AstItem[], signal?: AbortSignal): Promise<AstItem[]> {
         const systemPrompt = this.getAstSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source, y: item.type, n: item.name }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source, y: item.type, n: item.name };
+            return simplified;
+        });
         const results = await this.callOllama(simplifiedItems, systemPrompt, signal);
         return this.mapResultsBack(items, results);
     }
@@ -179,5 +185,54 @@ export class OllamaTranslationService extends BaseProvider {
         } catch {
             return [];
         }
+    }
+
+    /**
+     * Fix API — 修复单条翻译 (Ollama 实现)
+     */
+    protected override async callFixAPI(
+        source: string,
+        target: string,
+        errorMessage: string,
+        systemPrompt: string,
+        signal?: AbortSignal
+    ): Promise<string> {
+        const baseUrl = this.getBaseUrl();
+        const model = this.getModelName();
+        const url = `${baseUrl}/v1/chat/completions`;
+
+        const userContent = `Source: ${source}\nBroken Translation: ${target}\nError: ${errorMessage}\n\nPlease return ONLY the fixed translation string.`;
+
+        const requestBody = {
+            model,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userContent }
+            ],
+            temperature: 0.2,
+            stream: false,
+        };
+
+        const response = await requestUrl({
+            url,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            throw: false
+        });
+
+        if (response.status !== 200) {
+            const errorMsg = response.json?.error?.message || `HTTP ${response.status}`;
+            throw new Error(`Ollama API 错误: ${errorMsg}`);
+        }
+
+        const content = response.json?.choices?.[0]?.message?.content;
+        if (!content || content.trim() === '') throw new Error('AI 返回的修复结果为空');
+
+        let cleaned = content.trim();
+        if (cleaned.startsWith('"') && cleaned.endsWith('"')) cleaned = cleaned.slice(1, -1);
+        if (cleaned.startsWith("'") && cleaned.endsWith("'")) cleaned = cleaned.slice(1, -1);
+
+        return cleaned;
     }
 }

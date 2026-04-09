@@ -144,7 +144,10 @@ export class OpenAITranslationService extends BaseProvider {
      */
     protected async callRegexTranslationAPI(items: RegexItem[], signal?: AbortSignal): Promise<RegexItem[]> {
         const systemPrompt = this.getRegexSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source };
+            return simplified;
+        });
         const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, SimplifiedOutputArraySchema, signal);
         return this.mapResultsBack(items, simplifiedResults as any[]);
     }
@@ -154,7 +157,10 @@ export class OpenAITranslationService extends BaseProvider {
      */
     protected async callAstTranslationAPI(items: AstItem[], signal?: AbortSignal): Promise<AstItem[]> {
         const systemPrompt = this.getAstSystemPrompt();
-        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source, y: item.type, n: item.name }));
+        const simplifiedItems = items.map(item => {
+            const simplified: any = { i: item.id, s: item.source, y: item.type, n: item.name };
+            return simplified;
+        });
         const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, SimplifiedOutputArraySchema, signal);
         return this.mapResultsBack(items, simplifiedResults as any[]);
     }
@@ -256,6 +262,68 @@ export class OpenAITranslationService extends BaseProvider {
 
         // 抛出错误，交由上层的 executeParallelBatches 统一捕获并执行界面提醒
         throw new Error(errorMsg);
+    }
+
+    /**
+     * Fix API 调用 — 修复单条翻译
+     */
+    protected override async callFixAPI(
+        source: string,
+        target: string,
+        errorMessage: string,
+        systemPrompt: string,
+        signal?: AbortSignal
+    ): Promise<string> {
+        const settings = useGlobalStoreInstance.getState().i18n.settings;
+        const userContent = [
+            `Source: ${source}`,
+            `Broken Translation: ${target}`,
+            `Error: ${errorMessage}`,
+            '',
+            'Please return ONLY the fixed translation string.'
+        ].join('\n');
+
+        const messages: ChatMessage[] = [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+        ];
+
+        const timeoutController = new AbortController();
+        const timeoutMs = settings.llmTimeout || 60000;
+        const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+
+        const abortHandler = () => timeoutController.abort();
+        if (signal) signal.addEventListener('abort', abortHandler);
+
+        try {
+            if (signal?.aborted) throw new Error('修复任务已取消');
+
+            const openai = this.getOpenAIClient();
+            const completion = await openai.chat.completions.create({
+                messages: messages as any,
+                model: this.getModelName(),
+                temperature: 0.2,
+            }, { signal: timeoutController.signal });
+
+            const result = completion.choices[0].message.content;
+            if (!result || result.trim() === '') {
+                throw new Error('AI 返回的修复结果为空');
+            }
+
+            // 清理可能的 markdown 包裹
+            let cleaned = result.trim();
+            if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                cleaned = cleaned.slice(1, -1);
+            }
+            if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+                cleaned = cleaned.slice(1, -1);
+            }
+
+            return cleaned;
+        } finally {
+            clearTimeout(timeoutId);
+            if (signal) signal.removeEventListener('abort', abortHandler);
+        }
     }
 }
 

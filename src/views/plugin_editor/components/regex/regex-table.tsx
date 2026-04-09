@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Card,
@@ -11,7 +11,7 @@ import {
 } from '~/shadcn';
 import { useRegexStore } from '../..';
 import { RegexTableEmptyState } from './regex-table-empty-state';
-import { RegexItem } from '../../types';
+import { RegexItem, DiagnoseError } from '../../types';
 
 import {
     ColumnDef,
@@ -75,16 +75,25 @@ interface MemoizedRegexRowProps {
     row: any;
     isSelected: boolean;
     dataIndex: number;
+    errorType?: 'error' | 'unused' | 'security' | null;
 }
 
+const errorRowStyles: Record<string, string> = {
+    error: 'bg-destructive/8 border-l-2 border-l-destructive',
+    unused: 'bg-orange-500/8 border-l-2 border-l-orange-500',
+    security: 'bg-purple-500/8 border-l-2 border-l-purple-500',
+};
+
 const MemoizedRegexRowInner = React.forwardRef<HTMLTableRowElement, MemoizedRegexRowProps>(
-    ({ row, isSelected, dataIndex }, ref) => {
+    ({ row, isSelected, dataIndex, errorType }, ref) => {
+        const errorClass = errorType ? errorRowStyles[errorType] || '' : '';
+
         return (
             <TableRow
                 ref={ref}
                 data-index={dataIndex}
                 id={`regex-row-${row.original.id}`}
-                className={`border-b hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''}`}
+                className={`border-b hover:bg-accent/50 ${isSelected ? 'bg-accent' : ''} ${errorClass}`}
                 data-state={isSelected ? "selected" : undefined}
             >
                 {row.getVisibleCells().map((cell: any) => (
@@ -103,7 +112,8 @@ MemoizedRegexRowInner.displayName = 'MemoizedRegexRow';
 
 const MemoizedRegexRow = React.memo(MemoizedRegexRowInner, (prev, next) => {
     return prev.isSelected === next.isSelected
-        && prev.row.original === next.row.original;
+        && prev.row.original === next.row.original
+        && prev.errorType === next.errorType;
 });
 
 export const RegexTable = React.forwardRef<HTMLDivElement, Props>(({ data, editingId, onEditingIdChange }, ref) => {
@@ -112,6 +122,28 @@ export const RegexTable = React.forwardRef<HTMLDivElement, Props>(({ data, editi
     const deleteRegexItem = useRegexStore.use.deleteRegexItem();
     const resetRegexItem = useRegexStore.use.resetRegexItem();
     const parentRef = useRef<HTMLDivElement>(null);
+
+    // 诊断错误高亮映射 {id -> errorType}
+    const [errorMap, setErrorMap] = useState<Map<number, 'error' | 'unused' | 'security'>>(new Map());
+
+    useEffect(() => {
+        const handleErrors = (e: CustomEvent<{ errors: DiagnoseError[] }>) => {
+            const map = new Map<number, 'error' | 'unused' | 'security'>();
+            for (const err of e.detail.errors) {
+                if (err.type !== 'regex') continue;
+                if (err.severity === 'critical' || err.severity === 'warning') {
+                    map.set(err.id, 'security');
+                } else if (err.isUnused) {
+                    map.set(err.id, 'unused');
+                } else {
+                    map.set(err.id, 'error');
+                }
+            }
+            setErrorMap(map);
+        };
+        window.addEventListener('i18n-diagnose-errors', handleErrors as EventListener);
+        return () => window.removeEventListener('i18n-diagnose-errors', handleErrors as EventListener);
+    }, []);
 
     const columns = useMemo<ColumnDef<RegexItem>[]>(
         () => [
@@ -216,7 +248,7 @@ export const RegexTable = React.forwardRef<HTMLDivElement, Props>(({ data, editi
                                 {headerGroup.headers.map((header) => (
                                     <TableHead
                                         key={header.id}
-                                        className={`${header.id === 'actions' ? "w-[1%] whitespace-nowrap pl-2 pr-4" : "px-4"
+                                        className={`${header.id === 'actions' ? "w-[1%] whitespace-nowrap pl-2 pr-4" : "w-[45%] px-4"
                                             } sticky top-0 bg-background z-20 shadow-sm border-b ring-0`}
                                         style={{ backgroundColor: 'var(--background-primary)' }}
                                     >
@@ -244,6 +276,7 @@ export const RegexTable = React.forwardRef<HTMLDivElement, Props>(({ data, editi
                                     dataIndex={virtualRow.index}
                                     row={row}
                                     isSelected={row.original.id === editingId}
+                                    errorType={errorMap.get(row.original.id) || null}
                                 />
                             );
                         })}

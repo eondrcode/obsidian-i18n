@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import I18N from 'src/main';
 import { Notice } from 'obsidian';
+import I18N from 'src/main';
 import * as path from 'path';
+import { AstInspector } from '../../utils/ui/ast-inspector';
 
 interface DevDebugCardProps {
     i18n: I18N;
@@ -18,6 +19,17 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
     const [isDragging, setIsDragging] = useState(false);
     const dragOffset = useRef({ x: 0, y: 0 });
     const cardRef = useRef<HTMLDivElement>(null);
+
+    // Inspector 状态
+    const [isInspectorActive, setIsInspectorActive] = useState(false);
+    const inspectorRef = useRef<AstInspector | null>(null);
+
+    useEffect(() => {
+        inspectorRef.current = new AstInspector(i18n, () => setIsInspectorActive(false));
+        return () => {
+            inspectorRef.current?.deactivate();
+        };
+    }, [i18n]);
 
     // 主题适配
     const [isDark, setIsDark] = useState(document.body.classList.contains('theme-dark'));
@@ -181,6 +193,18 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
         }
     };
 
+    // 拾取器开关
+    const toggleInspector = () => {
+        if (isInspectorActive) {
+            inspectorRef.current?.deactivate();
+            setIsInspectorActive(false);
+        } else {
+            inspectorRef.current?.activate();
+            setIsInspectorActive(true);
+            new Notice('AST 监听模式已开启：点击界面元素查看源码信息', 3000);
+        }
+    };
+
     // 基础样式定义
     const colors = isDark ? {
         bg: '#1e1e1e',
@@ -294,6 +318,22 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                     }}
                 >
                     🗑️ 清理
+                </button>
+                <button
+                    onClick={toggleInspector}
+                    style={{
+                        padding: '8px',
+                        fontSize: '11px',
+                        backgroundColor: isInspectorActive ? (isDark ? '#4a1515' : '#fee2e2') : colors.btnBg,
+                        color: isInspectorActive ? (isDark ? '#ff9999' : '#c53030') : colors.text,
+                        border: `1px solid ${isInspectorActive ? (isDark ? '#ff4444' : '#f87171') : colors.border}`,
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        gridColumn: 'span 2',
+                        fontWeight: isInspectorActive ? 'bold' : 'normal'
+                    }}
+                >
+                    {isInspectorActive ? '🛑 停止监听' : '🔍 监听 AST'}
                 </button>
 
                 {/* 底部功能区 */}

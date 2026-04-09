@@ -17,33 +17,41 @@ export const createDictSlice: StateCreator<
     setSourceCache: (file, code) => set(state => ({ sourceCache: { ...state.sourceCache, [file]: code } })),
 
     setCurrentFile: (file) => {
-        const { currentFile, astItems, regexItems, dictData } = get();
+        set((state) => {
+            const { currentFile, astItems, regexItems, dictData } = state;
+            const newData = { ...dictData };
 
-        // 1. 保存当前进度到原文件
-        if (currentFile && dictData[currentFile]) {
-            dictData[currentFile] = {
-                ast: astItems.map(item => ({ type: item.type, name: item.name, source: item.source, target: item.target })),
-                regex: regexItems.map(item => ({ source: item.source, target: item.target }))
+            // 1. 保存当前进度到原文件
+            if (currentFile && newData[currentFile]) {
+                newData[currentFile] = {
+                    ast: astItems.map(item => ({ type: item.type, name: item.name, source: item.source, target: item.target })),
+                    regex: regexItems.map(item => ({ source: item.source, target: item.target }))
+                };
+            }
+
+            // 2. 获取新文件内容
+            const nextFileData = newData[file] || { ast: [], regex: [] };
+            const nextAstItems = nextFileData.ast.map((item, index) => ({
+                id: index,
+                type: item.type,
+                name: item.name,
+                source: item.source,
+                target: item.target,
+            }));
+            const nextRegexItems = nextFileData.regex.map((item, index) => ({
+                id: index,
+                source: item.source,
+                target: item.target
+            }));
+
+            // 3. 一次性更新所有状态
+            return {
+                currentFile: file,
+                dictData: newData,
+                astItems: nextAstItems,
+                regexItems: nextRegexItems
             };
-        }
-
-        // 2. 切换到新文件
-        set({ currentFile: file, dictData: { ...dictData } });
-
-        // 3. 将新文件的数据分发到 astItems 和 regexItems (交由外部 useEffect 联动或者直接在这里调用)
-        const nextFileData = dictData[file] || { ast: [], regex: [] };
-        get().setAstItems(nextFileData.ast.map((item, index) => ({
-            id: index,
-            type: item.type,
-            name: item.name,
-            source: item.source,
-            target: item.target,
-        })));
-        get().setRegexItems(nextFileData.regex.map((item, index) => ({
-            id: index,
-            source: item.source,
-            target: item.target
-        })));
+        });
     },
 
     addFile: (file) => {
@@ -59,25 +67,64 @@ export const createDictSlice: StateCreator<
     },
 
     deleteFile: (file) => {
-        const { dictData, currentFile } = get();
-        if (!dictData[file]) return;
+        set((state) => {
+            const { dictData, currentFile, astItems, regexItems, sourceCache } = state;
+            if (!dictData[file]) return state;
 
-        const newData = { ...dictData };
-        delete newData[file];
+            const newData = { ...dictData };
 
-        set({ dictData: newData });
-
-        // 如果删除的是当前正在编辑的文件，切换回 main.js 或第一个可用文件
-        if (currentFile === file) {
-            const nextFile = newData['main.js'] ? 'main.js' : Object.keys(newData)[0] || '';
-            if (nextFile) {
-                // 注意：这里不需要保存旧数据了，因为文件已删除
-                set({ currentFile: nextFile });
-                const nextData = newData[nextFile] || { ast: [], regex: [] };
-                get().setAstItems(nextData.ast.map((item, index) => ({ ...item, id: index })));
-                get().setRegexItems(nextData.regex.map((item, index) => ({ ...item, id: index })));
+            // 1. 如果当前还有正在编辑的项目，先将其保存到 dictData 中对应的位置 (除了要删除的那个)
+            if (currentFile && newData[currentFile] && currentFile !== file) {
+                newData[currentFile] = {
+                    ast: astItems.map(item => ({ type: item.type, name: item.name, source: item.source, target: item.target })),
+                    regex: regexItems.map(item => ({ source: item.source, target: item.target }))
+                };
             }
-        }
+
+            // 2. 执行删除
+            delete newData[file];
+
+            // 3. 同时也从源码缓存中移除
+            const newSourceCache = { ...sourceCache };
+            delete newSourceCache[file];
+
+            let nextState: Partial<RegexStore> = {
+                dictData: newData,
+                sourceCache: newSourceCache
+            };
+
+            // 4. 如果删除的是当前正在编辑的文件，或者当前已空，强制重置/切换1
+            if (currentFile === file) {
+                const nextFile = newData['main.js'] ? 'main.js' : Object.keys(newData)[0] || '';
+                if (nextFile) {
+                    const nextFileData = newData[nextFile] || { ast: [], regex: [] };
+                    nextState = {
+                        ...nextState,
+                        currentFile: nextFile,
+                        astItems: nextFileData.ast.map((item, index) => ({
+                            id: index,
+                            type: item.type,
+                            name: item.name,
+                            source: item.source,
+                            target: item.target,
+                        })),
+                        regexItems: nextFileData.regex.map((item, index) => ({
+                            id: index,
+                            source: item.source,
+                            target: item.target
+                        }))
+                    };
+                } else {
+                    nextState = {
+                        ...nextState,
+                        currentFile: '',
+                        astItems: [],
+                        regexItems: []
+                    };
+                }
+            }
+            return nextState;
+        });
     },
 
     syncFileDictInfo: (file, newAstItems, newRegexItems) => {
