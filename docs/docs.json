@@ -31,6 +31,7 @@
             "group": "核心功能",
             "pages": [
               "features/ast-editor",
+              "features/regex-editor",
               "features/ai-translation",
               "features/apply-restore",
               "features/cloud-sharing"
@@ -78,6 +79,7 @@
             "group": "Core Features",
             "pages": [
               "en/features/ast-editor",
+              "en/features/regex-editor",
               "en/features/ai-translation",
               "en/features/apply-restore",
               "en/features/cloud-sharing"

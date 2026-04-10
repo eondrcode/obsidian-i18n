@@ -1,0 +1,148 @@
+---
+title: "Regex 编辑器：维护正则提取条目"
+sidebarTitle: "Regex 编辑器"
+description: "在插件编辑器的 Regex 工作区中搜索、筛选、编辑、诊断和批量翻译正则提取条目。"
+---
+
+Regex 编辑器处理的是当前翻译文件里 `dict[file].regex` 的条目。它和 AST 编辑器共享同一个插件编辑器、文件列表、保存按钮和源码预览面板，但显示的是正则提取结果，不是 AST 节点。
+
+## 如何进入 Regex 编辑器
+
+<Steps>
+  <Step title="打开 i18n 管理中心">
+    点击侧边栏地球图标。
+  </Step>
+  <Step title="打开目标插件编辑器">
+    在插件翻译流程中打开要编辑的插件。
+  </Step>
+  <Step title="切换到 Regex">
+    在编辑器左侧的切换卡片里，把 `AST / Regex` 切换到 `Regex`。
+  </Step>
+</Steps>
+
+<Note>
+  `Regex` 是插件编辑器内部的工作区，不是独立的管理中心标签，也不是设置页里的提取规则配置。
+</Note>
+
+## 表格结构与编辑方式
+
+Regex 表格只有三列：
+
+| 列 | 实际内容 |
+|----|----------|
+| 原文 | 当前条目的 `source` |
+| 译文 | 当前条目的 `target`，可直接编辑 |
+| 操作 | 重置当前条目，或删除当前条目 |
+
+点击译文单元格后可以直接编辑。单元格失去焦点时，内容会写回当前编辑器状态。
+
+- 当前项的重置操作会把 `target` 还原成 `source`
+- 当 `target === source` 时，重置按钮会禁用
+- 当前文件没有 regex 条目时，表格会显示空状态
+
+<Tip>
+  是否立即写入磁盘取决于保存方式。开启自动保存时，停止编辑 500ms 后会自动触发保存；未开启时，需要点击编辑器左侧的保存按钮。
+</Tip>
+
+## 搜索与筛选
+
+顶部搜索框只匹配两列内容：
+
+- `source`
+- `target`
+
+筛选器有三种状态：
+
+| 状态 | 判定条件 |
+|------|----------|
+| 全部 | 不额外过滤 |
+| 已翻译 | `target` 有值且 `target !== source` |
+| 未翻译 | `!target` 或 `target === source` |
+
+切换当前文件时，Regex 编辑器会重置搜索词、筛选状态和当前编辑行。
+
+## 侧边栏可以做什么
+
+右侧侧边栏包含统计卡、手动新增卡、快捷操作卡、诊断卡和 AI 翻译卡。统计卡、手动新增卡、快捷操作卡和 AI 翻译卡可以在侧边栏视图菜单里显示或隐藏；诊断卡固定显示。
+
+### 统计卡
+
+统计卡会根据当前文件里的 regex 条目计算：
+
+- 总条目数
+- 已翻译数
+- 未翻译数
+- 进度百分比
+
+这里的“已翻译”判定是 `target` 有值且 `target !== source`。
+
+### 手动新增卡
+
+侧边栏里的 `新增规则` 卡片会向当前文件添加一条 regex 条目。
+
+- `source` 输入框会用 `new RegExp(pattern)` 做语法校验
+- `source` 无效时，新增按钮禁用
+- `target` 为空时，实际写入值会直接使用 `source`
+- `Ctrl+Enter` 可以提交当前条目
+
+### 快捷操作卡
+
+快捷操作卡提供三个入口：
+
+- 打开当前源文件
+- 对当前文件执行增量提取
+- 删除未翻译条目
+
+增量提取会读取当前文件源码，调用 `RegexTranslator(i18n.settings).extractTranslationsByRegex(...)` 重新提取，再通过 `mergeRegexItems(...)` 和现有条目合并，不会直接整表覆盖。
+
+如果当前插件已经处于已应用状态，增量提取按钮会禁用，提取逻辑也会直接拒绝执行。
+
+`删除未翻译条目` 会保留满足以下条件的条目：
+
+- `target` 有值
+- `target !== source`
+- `target.trim() !== ''`
+
+### 诊断卡
+
+诊断卡支持三种扫描模式：
+
+- 语法诊断
+- 未使用扫描
+- 安全扫描
+
+诊断结果可以直接跳转到对应条目。Regex 表格会按结果把行高亮为 `error`、`unused` 或 `security`。
+
+诊断卡还提供这些动作：
+
+- 清空当前诊断结果
+- 删除未使用条目
+- 恢复所有错误项
+- 对单条非未使用、非安全问题执行 AI 修复
+
+## AI 批量翻译
+
+Regex 的 AI 面板提供这些控制项：
+
+- 目标语言
+- 风格
+- 批次大小
+- 并发上限
+- 超时
+- 是否覆盖已有译文
+
+这些控件会直接读写全局设置中的 `language`、`llmLanguage`、`llmStyle`、`llmBatchSize`、`llmConcurrencyLimit` 和 `llmTimeout`。
+
+当 `overwrite = false` 时，只有满足以下条件的条目会进入批量翻译：
+
+- `target` 为空
+- `target.trim() === ''`
+- `target === source`
+
+AI 面板还会在发送请求前调用 `estimateTokens(targetItems, 'regex')`，显示预计 Token 和预计费用，并支持在任务执行中主动停止。
+
+<AccordionGroup>
+  <Accordion title="Regex 编辑器和提取规则配置是什么关系？">
+    Regex 编辑器负责维护已经提取出来的条目。正则提取本身读取当前设置里的 `reFlags`、`reLength`、`reDatas`、`reRejectRe` 和 `reValidRe`；Regex AI Prompt 使用 `llmRegexPrompt`。
+  </Accordion>
+</AccordionGroup>

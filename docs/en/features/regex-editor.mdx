@@ -1,0 +1,148 @@
+---
+title: "Regex editor for regex extraction rows"
+sidebarTitle: "Regex Editor"
+description: "Search, filter, edit, diagnose, and batch translate regex extraction rows inside the plugin editor's Regex workspace."
+---
+
+The Regex editor works on the current translation file's `dict[file].regex` rows. It shares the same plugin editor shell, file list, save button, and source preview panel as the AST editor, but it shows regex extraction results instead of AST nodes.
+
+## Open the Regex editor
+
+<Steps>
+  <Step title="Open the i18n Manager">
+    Click the globe icon in the sidebar.
+  </Step>
+  <Step title="Open a plugin editor">
+    In the plugin translation flow, open the plugin you want to edit.
+  </Step>
+  <Step title="Switch to Regex">
+    In the switcher card on the left side of the editor, change `AST / Regex` to `Regex`.
+  </Step>
+</Steps>
+
+<Note>
+  `Regex` is a workspace inside the plugin editor. It is not a separate manager tab and it is not the settings page for regex extraction rules.
+</Note>
+
+## Table structure and editing
+
+The Regex table has exactly three columns:
+
+| Column | Actual content |
+|--------|----------------|
+| Source | the row's `source` |
+| Target | the row's `target`, editable inline |
+| Actions | reset the current row, or delete the current row |
+
+Click a target cell to edit it inline. When the cell loses focus, the new text is written back into the current editor state.
+
+- reset sets `target` back to `source`
+- the reset button is disabled when `target === source`
+- the table shows an empty state when the current file has no regex rows
+
+<Tip>
+  Disk persistence still depends on the save flow. With auto-save enabled, the editor triggers save 500ms after editing stops; otherwise you need to click the save button on the left side of the editor.
+</Tip>
+
+## Search and filters
+
+The search box only matches these two fields:
+
+- `source`
+- `target`
+
+The filter has three states:
+
+| State | Condition |
+|-------|-----------|
+| All | no extra filtering |
+| Translated | `target` exists and `target !== source` |
+| Untranslated | `!target` or `target === source` |
+
+When you switch files, the Regex editor clears the search text, resets the filter to `all`, and clears the current editing row.
+
+## Sidebar capabilities
+
+The right sidebar contains a stats card, a manual insert card, a quick actions card, a diagnose card, and an AI translation card. The stats, insert, quick actions, and AI cards can be toggled from the sidebar view menu. The diagnose card is always shown.
+
+### Stats card
+
+The stats card calculates these values from the current file's regex rows:
+
+- total row count
+- translated row count
+- untranslated row count
+- progress percentage
+
+For this card, a row is translated only when `target` exists and `target !== source`.
+
+### Manual insert card
+
+The `新增规则` card adds one regex row to the current file.
+
+- the `source` field is validated with `new RegExp(pattern)`
+- the add button is disabled while `source` is invalid
+- when `target` is empty, the stored value becomes `source`
+- `Ctrl+Enter` submits the current row
+
+### Quick actions card
+
+The quick actions card exposes three actions:
+
+- open the current source file
+- run incremental extraction for the current file
+- delete untranslated rows
+
+Incremental extraction reads the current source file, calls `RegexTranslator(i18n.settings).extractTranslationsByRegex(...)`, and merges the result with existing rows through `mergeRegexItems(...)`. It does not replace the full table unconditionally.
+
+If the current plugin is already applied, incremental extraction is disabled in the UI and blocked again in the extraction logic.
+
+`Delete untranslated` keeps only rows that meet all of these conditions:
+
+- `target` exists
+- `target !== source`
+- `target.trim() !== ''`
+
+### Diagnose card
+
+The diagnose card supports three scan modes:
+
+- syntax diagnose
+- unused scan
+- security scan
+
+Results can jump directly to the matching row. The Regex table highlights affected rows as `error`, `unused`, or `security`.
+
+The diagnose card also provides these actions:
+
+- clear current diagnose results
+- delete unused rows
+- restore all error rows
+- run AI fix for one row when the issue is neither unused nor security-related
+
+## AI batch translation
+
+The Regex AI panel exposes these controls:
+
+- target language
+- style
+- batch size
+- concurrency limit
+- timeout
+- overwrite existing targets or not
+
+These controls read from and write back to the global settings fields `language`, `llmLanguage`, `llmStyle`, `llmBatchSize`, `llmConcurrencyLimit`, and `llmTimeout`.
+
+When `overwrite = false`, batch translation only includes rows whose `target` is:
+
+- empty
+- whitespace-only
+- equal to `source`
+
+Before requests are sent, the panel calls `estimateTokens(targetItems, 'regex')` to show the estimated token usage and cost. The running task can also be stopped from the same panel.
+
+<AccordionGroup>
+  <Accordion title="How does the Regex editor relate to regex extraction settings?">
+    The Regex editor maintains rows that have already been extracted. Regex extraction itself reads the current settings fields `reFlags`, `reLength`, `reDatas`, `reRejectRe`, and `reValidRe`. The Regex AI prompt uses `llmRegexPrompt`.
+  </Accordion>
+</AccordionGroup>
