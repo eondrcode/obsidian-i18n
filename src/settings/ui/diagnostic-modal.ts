@@ -61,6 +61,30 @@ export class DiagnosticModal extends Modal {
             }
         }
 
+        // ── 调试日志 (控制台) ──
+        if (this.report.logs && this.report.logs.length > 0) {
+            const logsSection = contentEl.createDiv({ cls: 'diag-logs-section' });
+
+            const logsHeader = logsSection.createDiv({ cls: 'diag-logs-header' });
+            setIcon(logsHeader.createSpan({ cls: 'diag-logs-icon' }), 'terminal');
+            logsHeader.createSpan({ text: '诊断控制台日志 (点击展开/折叠)', cls: 'diag-logs-title' });
+
+            const logsContent = logsSection.createDiv({ cls: 'diag-logs-content' });
+            // 如果报错则默认展开，否则默认收起
+            const hasErrors = this.report.logs.some(l => l.level === 'error');
+            if (!hasErrors) logsContent.style.display = 'none';
+
+            logsHeader.addEventListener('click', () => {
+                logsContent.style.display = logsContent.style.display === 'none' ? 'block' : 'none';
+            });
+
+            for (const log of this.report.logs) {
+                const logEl = logsContent.createDiv({ cls: `diag-log-line diag-log-${log.level}` });
+                logEl.createSpan({ text: `[${log.stage}]`, cls: 'diag-log-stage' });
+                logEl.createSpan({ text: log.message, cls: 'diag-log-msg' });
+            }
+        }
+
         // ── 关闭按钮 ──
         const footer = contentEl.createDiv({ cls: 'diag-footer' });
         const closeBtn = footer.createEl('button', { text: '关闭', cls: 'mod-cta' });
@@ -212,6 +236,33 @@ export class DiagnosticModal extends Modal {
                 padding-top: 8px;
                 border-top: 1px solid var(--background-modifier-border);
             }
+
+            /* ── 调试日志 ── */
+            .diag-logs-section {
+                margin-bottom: 16px; border-radius: 8px;
+                border: 1px solid var(--background-modifier-border);
+                overflow: hidden;
+            }
+            .diag-logs-header {
+                display: flex; align-items: center; gap: 8px;
+                padding: 10px 14px; background: var(--background-secondary-alt);
+                cursor: pointer; font-size: 0.85em; font-weight: 600;
+                color: var(--text-muted); transition: all 0.15s;
+            }
+            .diag-logs-header:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+            .diag-logs-icon svg { width: 14px; height: 14px; }
+            .diag-logs-content {
+                background: var(--background-primary-alt); padding: 12px;
+                border-top: 1px solid var(--background-modifier-border);
+                max-height: 200px; overflow-y: auto;
+                font-family: var(--font-monospace); font-size: 0.75em;
+            }
+            .diag-log-line { margin-bottom: 4px; line-height: 1.4; word-break: break-all; }
+            .diag-log-info { color: var(--text-muted); }
+            .diag-log-warn { color: #dbad00; }
+            .diag-log-error { color: #cc3232; }
+            .diag-log-stage { color: var(--text-accent); margin-right: 8px; font-weight: 600; }
+            .diag-log-msg { white-space: pre-wrap; font-family: inherit; }
         `;
         document.head.appendChild(style);
     }

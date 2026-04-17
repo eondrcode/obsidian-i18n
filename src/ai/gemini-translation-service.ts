@@ -91,30 +91,7 @@ export class GeminiTranslationService extends BaseProvider {
 
                 if (!content) throw new Error('Gemini 返回内容为空');
 
-                let parsedData: unknown;
-                try {
-                    parsedData = JSON.parse(content);
-                } catch {
-                    // 尝试从 markdown 代码块提取
-                    const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                    if (match) {
-                        parsedData = JSON.parse(match[1]);
-                    } else {
-                        throw new Error(`Gemini 返回 JSON 解析失败`);
-                    }
-                }
-
-                // 验证数据结构
-                if (!Array.isArray(parsedData)) {
-                    // 部分 Gemini 模型可能返回 { items: [...] } 格式
-                    if ((parsedData as any)?.items && Array.isArray((parsedData as any).items)) {
-                        parsedData = (parsedData as any).items;
-                    } else {
-                        throw new Error('Gemini 返回数据不是数组格式');
-                    }
-                }
-
-                return parsedData as any[];
+                return this.parseResponseContent(content);
             } catch (error: any) {
                 const isTimeout = error.name === 'AbortError' && !signal?.aborted;
                 const isManualAbort = signal?.aborted || error.message === '翻译任务已取消';

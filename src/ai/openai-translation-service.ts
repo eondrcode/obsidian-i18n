@@ -4,48 +4,15 @@ import OpenAI from "openai";
 import { normalizeOpenAIUrl } from "../utils/ai/url-helper";
 import { RegexItem, AstItem } from "../views/plugin_editor/types";
 import { ThemeTranslationItem } from "../views/theme_editor/types";
-import z from "zod";
 import { useGlobalStoreInstance } from "~/utils";
 import { BaseProvider } from "./base-provider";
 import { LLM_PROVIDERS } from "./constants";
-import {
-    DEFAULT_REGEX_PROMPT_TEMPLATE, generateRegexSystemPrompt,
-    DEFAULT_AST_PROMPT_TEMPLATE, generateAstSystemPrompt,
-    DEFAULT_THEME_PROMPT_TEMPLATE, generateThemeSystemPrompt,
-} from "./prompts";
 
 // 自定义消息类型
 interface ChatMessage {
     role: "system" | "user" | "assistant";
     content: string;
 }
-
-// --- 优化后的 Zod Schema (用于 API 传输和校验) ---
-
-// 输入数据的精简结构 (发送给 AI)
-const SimplifiedInputSchema = z.object({
-    i: z.number(),       // id
-    s: z.string(),       // source
-    y: z.string().optional(), // type (context)
-    n: z.string().optional(), // name (context)
-});
-
-// 输出数据的精简结构 (从 AI 接收)
-const SimplifiedOutputSchema = z.object({
-    i: z.number(),       // id
-    t: z.string(),       // target
-});
-const SimplifiedOutputArraySchema = z.array(SimplifiedOutputSchema);
-
-// 保持原始数据类型的校验 (用于还原后的最终校验)
-const RegexItemSchema = z.object({ id: z.number(), source: z.string(), target: z.string() });
-const RegexItemArraySchema = z.array(RegexItemSchema);
-
-const AstItemSchema = z.object({ id: z.number(), source: z.string(), target: z.string(), type: z.string(), name: z.string() });
-const AstItemArraySchema = z.array(AstItemSchema);
-
-const ThemeItemSchema = z.object({ id: z.number(), source: z.string(), target: z.string(), type: z.string().optional() });
-const ThemeItemArraySchema = z.array(ThemeItemSchema);
 
 export class OpenAITranslationService extends BaseProvider {
 
@@ -66,7 +33,7 @@ export class OpenAITranslationService extends BaseProvider {
         if (activeProfile) {
             apiKey = activeProfile.key;
             const rawUrl = normalizeOpenAIUrl(activeProfile.url || LLM_PROVIDERS[settings.llmApi]?.baseUrl || "");
-            baseURL = rawUrl ? `${rawUrl}/v1` : undefined;
+            baseURL = rawUrl || undefined;
         } else {
             // 回退到以前的单字段配置 (仅为了极致兼容)
             const config = LLM_PROVIDERS[settings.llmApi];
@@ -144,12 +111,9 @@ export class OpenAITranslationService extends BaseProvider {
      */
     protected async callRegexTranslationAPI(items: RegexItem[], signal?: AbortSignal): Promise<RegexItem[]> {
         const systemPrompt = this.getRegexSystemPrompt();
-        const simplifiedItems = items.map(item => {
-            const simplified: any = { i: item.id, s: item.source };
-            return simplified;
-        });
-        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, SimplifiedOutputArraySchema, signal);
-        return this.mapResultsBack(items, simplifiedResults as any[]);
+        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source }));
+        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, signal);
+        return this.mapResultsBack(items, simplifiedResults);
     }
 
     /**
@@ -157,12 +121,9 @@ export class OpenAITranslationService extends BaseProvider {
      */
     protected async callAstTranslationAPI(items: AstItem[], signal?: AbortSignal): Promise<AstItem[]> {
         const systemPrompt = this.getAstSystemPrompt();
-        const simplifiedItems = items.map(item => {
-            const simplified: any = { i: item.id, s: item.source, y: item.type, n: item.name };
-            return simplified;
-        });
-        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, SimplifiedOutputArraySchema, signal);
-        return this.mapResultsBack(items, simplifiedResults as any[]);
+        const simplifiedItems = items.map(item => ({ i: item.id, s: item.source, y: item.type, n: item.name }));
+        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, signal);
+        return this.mapResultsBack(items, simplifiedResults);
     }
 
     /**
@@ -171,15 +132,15 @@ export class OpenAITranslationService extends BaseProvider {
     protected async callThemeTranslationAPI(items: ThemeTranslationItem[], signal?: AbortSignal): Promise<ThemeTranslationItem[]> {
         const systemPrompt = this.getThemeSystemPrompt();
         const simplifiedItems = items.map(item => ({ i: (item as any).id, s: item.source, y: item.type }));
-        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, SimplifiedOutputArraySchema, signal);
-        return this.mapResultsBack(items as any[], simplifiedResults as any[]) as unknown as ThemeTranslationItem[];
+        const simplifiedResults = await this.callOpenAI(simplifiedItems, systemPrompt, signal);
+        return this.mapResultsBack(items as any[], simplifiedResults) as unknown as ThemeTranslationItem[];
     }
 
 
     /**
      * 统一的 OpenAI 调用逻辑
      */
-    private async callOpenAI(items: any[], systemPrompt: string, schema: z.ZodType<any>, signal?: AbortSignal, maxRetries = 2): Promise<any[]> {
+    private async callOpenAI(items: any[], systemPrompt: string, signal?: AbortSignal, maxRetries = 2): Promise<Array<{ i: number; t: string }>> {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
         const messages: ChatMessage[] = [
             { role: "system", content: systemPrompt },
@@ -204,34 +165,46 @@ export class OpenAITranslationService extends BaseProvider {
             try {
                 if (signal?.aborted) throw new Error('翻译任务已取消');
 
-                const openai = this.getOpenAIClient();
-                const completion = await openai.chat.completions.create({
+                const requestParams: any = {
                     messages: messages as any,
                     model: this.getModelName(),
                     temperature: 0.3,
-                    response_format: { type: settings.llmResponseFormat as any },
-                }, { signal: timeoutController.signal });
+                };
 
-                let assistantContent = completion.choices[0].message.content;
-                if (!assistantContent) { throw new Error('翻译结果为空'); }
-
-                let parsedData: unknown;
-                try {
-                    parsedData = JSON.parse(assistantContent);
-                } catch (parseError) {
-                    // 尝试初步修复通常的截断或者特殊符号引起的 JSON 问题
-                    try {
-                        let fixedContent = assistantContent;
-                        const jsonMatch = fixedContent.match(/```json\s*([\s\S]*?)\s*```/) || fixedContent.match(/```\s*([\s\S]*?)\s*```/);
-                        if (jsonMatch) fixedContent = jsonMatch[1];
-                        fixedContent = fixedContent.replace(/[\u0000-\u001F]+/g, " ");
-                        parsedData = JSON.parse(fixedContent);
-                    } catch (e) {
-                        throw new Error(`JSON语法错误: ${(e as Error).message}`);
-                    }
+                // 根据设定的格式注入对应 response_format
+                if (settings.llmResponseFormat === 'json_object') {
+                    requestParams.response_format = { type: 'json_object' };
+                } else if (settings.llmResponseFormat === 'json_schema') {
+                    requestParams.response_format = {
+                        type: 'json_schema',
+                        json_schema: {
+                            name: "translation_result",
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    items: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: { i: { type: "number" }, t: { type: "string" } },
+                                            required: ["i", "t"],
+                                            additionalProperties: false
+                                        }
+                                    }
+                                },
+                                required: ["items"],
+                                additionalProperties: false
+                            },
+                            strict: true
+                        }
+                    };
                 }
 
-                return schema.parse(parsedData);
+                const openai = this.getOpenAIClient();
+                const completion = await openai.chat.completions.create(requestParams, { signal: timeoutController.signal });
+
+                const assistantContent = completion.choices[0].message.content;
+                return this.parseResponseContent(assistantContent || '');
             } catch (error: any) {
                 // 检查是否是因为超时导致的取消
                 const isTimeout = error.name === 'AbortError' && !signal?.aborted;

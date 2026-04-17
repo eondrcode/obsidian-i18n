@@ -53,7 +53,6 @@ export class OllamaTranslationService extends BaseProvider {
                 { role: 'user', content: JSON.stringify(items) }
             ],
             temperature: 0.3,
-            response_format: { type: 'json_object' },
             stream: false,
         };
 
@@ -95,27 +94,7 @@ export class OllamaTranslationService extends BaseProvider {
 
                 if (!content) throw new Error('Ollama 返回内容为空');
 
-                let parsedData: unknown;
-                try {
-                    parsedData = JSON.parse(content);
-                } catch {
-                    const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                    if (match) {
-                        parsedData = JSON.parse(match[1]);
-                    } else {
-                        throw new Error('Ollama 返回 JSON 解析失败');
-                    }
-                }
-
-                if (!Array.isArray(parsedData)) {
-                    if ((parsedData as any)?.items && Array.isArray((parsedData as any).items)) {
-                        parsedData = (parsedData as any).items;
-                    } else {
-                        throw new Error('Ollama 返回数据不是数组格式');
-                    }
-                }
-
-                return parsedData as any[];
+                return this.parseResponseContent(content);
             } catch (error: any) {
                 const isManualAbort = signal?.aborted || error.message === '翻译任务已取消';
                 if (isManualAbort) throw new Error('翻译任务已取消');

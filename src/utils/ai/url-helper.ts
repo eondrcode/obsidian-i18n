@@ -20,8 +20,7 @@ export function normalizeOpenAIUrl(url: string | undefined): string | undefined 
         '/chat/completions',
         '/completions',
         '/chat',
-        '/models',
-        '/v1'
+        '/models'
     ];
 
     let found = true;

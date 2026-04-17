@@ -12,6 +12,7 @@ import { useGlobalStoreInstance } from '~/utils';
 import { ITranslationProvider, OnRegexBatchComplete, OnAstBatchComplete, OnThemeBatchComplete } from './provider-types';
 import { RegexItem, AstItem } from '../views/plugin_editor/types';
 import { ThemeTranslationItem } from '../views/theme_editor/types';
+import { parseTranslationResponse } from '../utils/ai/response-parser';
 import { LLM_PROVIDERS } from './constants';
 import { estimateBatchTokens, estimateCost } from '../utils/ai/token-estimator';
 import {
@@ -116,6 +117,7 @@ export abstract class BaseProvider implements ITranslationProvider {
     }
 
     // ======================== 辅助方法（子类可覆写） ========================
+
 
     /** 获取当前使用的模型名称（子类可覆写） */
     protected getModelName(): string {
@@ -226,6 +228,26 @@ export abstract class BaseProvider implements ITranslationProvider {
         const template = settings.llmThemePrompt || DEFAULT_THEME_PROMPT_TEMPLATE;
         return generateThemeSystemPrompt(template, settings.llmLanguage, settings.llmStyle);
     }
+
+    // ======================== 统一响应解析 ========================
+
+    /**
+     * 统一解析 LLM 返回的文本内容，提取翻译结果数组。
+     *
+     * 处理管线：
+     * 1. 剥离 Markdown 代码块包裹
+     * 2. 清除控制字符后 JSON.parse
+     * 3. 智能数组提取（兼容各种模型/服务商的返回格式）
+     * 4. 结构校验（确保每项包含 i 和 t 字段）
+     *
+     * @param content LLM 返回的原始字符串
+     * @returns 符合 { i: number, t: string } 结构的数组
+     */
+    protected parseResponseContent(content: string): Array<{ i: number; t: string }> {
+        return parseTranslationResponse(content);
+    }
+
+    // ======================== 结果映射 ========================
 
     /** 将 AI 返回的简化结果映射回完整的翻译项 */
     protected mapResultsBack<T extends { id: number; source: string; target: string }>(
