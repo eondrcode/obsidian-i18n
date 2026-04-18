@@ -44,7 +44,7 @@ export interface I18nSettings {
     // ==============================
     // 语言模型翻译配置 (LLM)
     // ==============================
-    llmApi: number;                 // 当前选中的 LLM 服务商 (1: OpenAI, etc.)
+    llmApi: string;                 // 当前选中的 LLM 服务商 ('openai', 'gemini', 等)
     llmResponseFormat: string;      // LLM 返回格式 (text, json_object)
     llmLanguage: string;            // LLM 翻译的目标语言
     llmStyle: string;               // LLM 翻译的风格类型
@@ -259,7 +259,7 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     // 语言模型翻译配置 (LLM)
     // ==============================
-    llmApi: 1,                      // 默认使用第一类 API 配置 (OpenAI)
+    llmApi: 'openai',               // 默认使用第一类 API 配置 (OpenAI)
     llmResponseFormat: 'text',      // 默认使用 text 的通用容错返回格式
     llmLanguage: '简体中文',        // LLM 的默认生成语言
     llmStyle: '无',                 // LLM 的默认生成风格
@@ -275,13 +275,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // OpenAI 专属配置
     llmOpenaiUrl: '',
     llmOpenaiKey: '',
-    llmOpenaiModel: LLM_PROVIDERS[1].defaultModel,
+    llmOpenaiModel: LLM_PROVIDERS['openai'].defaultModel,
     llmOpenaiProfiles: [{
         id: 'default',
         name: 'Default',
         url: '',
         key: '',
-        model: LLM_PROVIDERS[1].defaultModel,
+        model: LLM_PROVIDERS['openai'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -323,13 +323,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // DeepSeek 专属配置
     llmDeepseekKey: '',
-    llmDeepseekModel: LLM_PROVIDERS[4].defaultModel,
+    llmDeepseekModel: LLM_PROVIDERS['deepseek'].defaultModel,
     llmDeepseekProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[4].baseUrl || '',
+        url: LLM_PROVIDERS['deepseek'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[4].defaultModel,
+        model: LLM_PROVIDERS['deepseek'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -338,13 +338,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // 智谱 AI 专属配置
     llmZhipuKey: '',
-    llmZhipuModel: LLM_PROVIDERS[5].defaultModel,
+    llmZhipuModel: LLM_PROVIDERS['zhipu'].defaultModel,
     llmZhipuProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[5].baseUrl || '',
+        url: LLM_PROVIDERS['zhipu'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[5].defaultModel,
+        model: LLM_PROVIDERS['zhipu'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -353,13 +353,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // 月之暗面 (Moonshot/Kimi) 专属配置
     llmMoonshotKey: '',
-    llmMoonshotModel: LLM_PROVIDERS[6].defaultModel,
+    llmMoonshotModel: LLM_PROVIDERS['moonshot'].defaultModel,
     llmMoonshotProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[6].baseUrl || '',
+        url: LLM_PROVIDERS['moonshot'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[6].defaultModel,
+        model: LLM_PROVIDERS['moonshot'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -368,13 +368,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // 通义千问 (Aliyun DashScope) 专属配置
     llmAliyunKey: '',
-    llmAliyunModel: LLM_PROVIDERS[7].defaultModel,
+    llmAliyunModel: LLM_PROVIDERS['aliyun'].defaultModel,
     llmAliyunProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[7].baseUrl || '',
+        url: LLM_PROVIDERS['aliyun'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[7].defaultModel,
+        model: LLM_PROVIDERS['aliyun'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -383,13 +383,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // 百度千帆 (Baidu Qianfan) 专属配置
     llmBaiduKey: '',
-    llmBaiduModel: LLM_PROVIDERS[8].defaultModel,
+    llmBaiduModel: LLM_PROVIDERS['baidu'].defaultModel,
     llmBaiduProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[8].baseUrl || '',
+        url: LLM_PROVIDERS['baidu'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[8].defaultModel,
+        model: LLM_PROVIDERS['baidu'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -398,13 +398,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // 字节跳动 (ByteDance Ark/Doubao) 专属配置
     llmBytedanceKey: '',
-    llmBytedanceModel: LLM_PROVIDERS[9].defaultModel,
+    llmBytedanceModel: LLM_PROVIDERS['bytedance'].defaultModel,
     llmBytedanceProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[9].baseUrl || '',
+        url: LLM_PROVIDERS['bytedance'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[9].defaultModel,
+        model: LLM_PROVIDERS['bytedance'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -413,13 +413,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // Groq 专属配置
     llmGroqKey: '',
-    llmGroqModel: LLM_PROVIDERS[10].defaultModel,
+    llmGroqModel: LLM_PROVIDERS['groq'].defaultModel,
     llmGroqProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[10].baseUrl || '',
+        url: LLM_PROVIDERS['groq'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[10].defaultModel,
+        model: LLM_PROVIDERS['groq'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -428,13 +428,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // SiliconFlow 专属配置
     llmSiliconflowKey: '',
-    llmSiliconflowModel: LLM_PROVIDERS[11].defaultModel,
+    llmSiliconflowModel: LLM_PROVIDERS['siliconflow'].defaultModel,
     llmSiliconflowProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[11].baseUrl || '',
+        url: LLM_PROVIDERS['siliconflow'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[11].defaultModel,
+        model: LLM_PROVIDERS['siliconflow'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -443,13 +443,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // OpenRouter 专属配置
     llmOpenrouterKey: '',
-    llmOpenrouterModel: LLM_PROVIDERS[12].defaultModel,
+    llmOpenrouterModel: LLM_PROVIDERS['openrouter'].defaultModel,
     llmOpenrouterProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[12].baseUrl || '',
+        url: LLM_PROVIDERS['openrouter'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[12].defaultModel,
+        model: LLM_PROVIDERS['openrouter'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -458,13 +458,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // DeepInfra 专属配置
     llmDeepinfraKey: '',
-    llmDeepinfraModel: LLM_PROVIDERS[13].defaultModel,
+    llmDeepinfraModel: LLM_PROVIDERS['deepinfra'].defaultModel,
     llmDeepinfraProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[13].baseUrl || '',
+        url: LLM_PROVIDERS['deepinfra'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[13].defaultModel,
+        model: LLM_PROVIDERS['deepinfra'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -473,13 +473,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // Mistral AI 专属配置
     llmMistralKey: '',
-    llmMistralModel: LLM_PROVIDERS[14].defaultModel,
+    llmMistralModel: LLM_PROVIDERS['mistral'].defaultModel,
     llmMistralProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[14].baseUrl || '',
+        url: LLM_PROVIDERS['mistral'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[14].defaultModel,
+        model: LLM_PROVIDERS['mistral'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -488,13 +488,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // MiniMax 专属配置
     llmMinimaxKey: '',
-    llmMinimaxModel: LLM_PROVIDERS[15].defaultModel,
+    llmMinimaxModel: LLM_PROVIDERS['minimax'].defaultModel,
     llmMinimaxProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[15].baseUrl || '',
+        url: LLM_PROVIDERS['minimax'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[15].defaultModel,
+        model: LLM_PROVIDERS['minimax'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -503,13 +503,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // StepFun 专属配置
     llmStepfunKey: '',
-    llmStepfunModel: LLM_PROVIDERS[16].defaultModel,
+    llmStepfunModel: LLM_PROVIDERS['stepfun'].defaultModel,
     llmStepfunProfiles: [{
         id: 'default',
         name: 'Default',
-        url: LLM_PROVIDERS[16].baseUrl || '',
+        url: LLM_PROVIDERS['stepfun'].baseUrl || '',
         key: '',
-        model: LLM_PROVIDERS[16].defaultModel,
+        model: LLM_PROVIDERS['stepfun'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0

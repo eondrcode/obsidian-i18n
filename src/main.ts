@@ -3,7 +3,8 @@ import * as fs from 'fs-extra';
 import './locales';     // 引入i18n配置
 
 import { App, Plugin, PluginManifest } from 'obsidian';
-import { DEFAULT_SETTINGS, I18nSettings } from './settings/data';
+import { DEFAULT_SETTINGS, I18nSettings, LLMProfile } from './settings/data';
+import { LLM_PROVIDERS } from './ai/constants';
 import { I18nSettingTab } from './settings';
 import { t } from './locales';
 
@@ -115,57 +116,81 @@ export default class I18N extends Plugin {
     // [配置类] 加载
     public async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-        await this.migrateOpenAIProfiles();
+
+        // 旧版数字 ID 升级迁移
+        if (typeof this.settings.llmApi === 'number') {
+            const legacyApiMap: Record<number, string> = {
+                1: 'openai', 2: 'gemini', 3: 'ollama', 4: 'deepseek', 5: 'zhipu', 
+                6: 'moonshot', 7: 'aliyun', 8: 'baidu', 9: 'bytedance', 10: 'groq', 
+                11: 'siliconflow', 12: 'openrouter', 13: 'deepinfra', 14: 'mistral', 
+                15: 'minimax', 16: 'stepfun'
+            };
+            this.settings.llmApi = legacyApiMap[this.settings.llmApi as number] || 'openai';
+            await this.saveSettings();
+        }
+
+        await this.migrateLLMProfiles();
     }
     // [配置类] 保存
     public async saveSettings() { await this.saveData(this.settings); }
 
     /**
-     * 迁移旧版 OpenAI 配置到多 Profile 结构
+     * 统一迁移所有旧版服务商配置到多 Profile 结构
      */
-    private async migrateOpenAIProfiles() {
-        if (this.settings.llmOpenaiProfiles && this.settings.llmOpenaiProfiles.length > 0) {
-            // 确保现有 Profile 拥有新增加的价格字段
-            let modified = false;
-            this.settings.llmOpenaiProfiles.forEach(p => {
-                if (p.useCustomPrice === undefined) {
-                    p.useCustomPrice = false;
-                    p.priceInput = 1.1;
-                    p.priceOutput = 4.4;
-                    modified = true;
-                }
-            });
-            if (modified) await this.saveSettings();
-            return;
-        }
+    private async migrateLLMProfiles() {
+        let modified = false;
 
-        // 如果没有 Profile 但有旧配置，自动创建一个 Default Profile
-        const hasOldConfig = this.settings.llmOpenaiUrl || this.settings.llmOpenaiKey;
+        Object.values(LLM_PROVIDERS).forEach(config => {
+            const profilesField = `llm${config.labelKey}Profiles` as keyof I18nSettings;
+            const activeIdField = `llm${config.labelKey}ActiveProfileId` as keyof I18nSettings;
+            
+            let profiles = this.settings[profilesField] as LLMProfile[];
+            
+            if (!profiles || profiles.length === 0) {
+                const legacyUrlField = `llm${config.labelKey}Url` as keyof I18nSettings;
+                const legacyKeyField = `llm${config.labelKey}Key` as keyof I18nSettings;
+                const legacyModelField = `llm${config.labelKey}Model` as keyof I18nSettings;
 
-        if (hasOldConfig || this.settings.llmOpenaiProfiles.length === 0) {
-            const defaultProfile = {
-                id: 'default',
-                name: 'Default',
-                url: this.settings.llmOpenaiUrl || '',
-                key: this.settings.llmOpenaiKey || '',
-                model: this.settings.llmOpenaiModel || 'gpt-3.5-turbo',
-                useCustomPrice: this.settings.llmUseCustomPrice || false,
-                priceInput: this.settings.llmPriceInputCustom || 1.1,
-                priceOutput: this.settings.llmPriceOutputCustom || 4.4
-            };
-            this.settings.llmOpenaiProfiles = [defaultProfile];
-            this.settings.llmOpenaiActiveProfileId = 'default';
+                const defaultProfile: LLMProfile = {
+                    id: 'default',
+                    name: 'Default',
+                    url: (this.settings[legacyUrlField] as string) || config.baseUrl || '',
+                    key: (this.settings[legacyKeyField] as string) || '',
+                    model: (this.settings[legacyModelField] as string) || config.defaultModel,
+                    useCustomPrice: false,
+                    priceInput: 0,
+                    priceOutput: 0
+                };
+                
+                (this.settings as any)[profilesField] = [defaultProfile];
+                (this.settings as any)[activeIdField] = 'default';
+                modified = true;
+            } else {
+                profiles.forEach(p => {
+                    if (p.useCustomPrice === undefined) {
+                        p.useCustomPrice = false;
+                        p.priceInput = 0;
+                        p.priceOutput = 0;
+                        modified = true;
+                    }
+                });
+            }
 
-            // 同步一次当前生效配置
-            this.settings.llmOpenaiUrl = defaultProfile.url;
-            this.settings.llmOpenaiKey = defaultProfile.key;
-            this.settings.llmOpenaiModel = defaultProfile.model;
-            this.settings.llmUseCustomPrice = defaultProfile.useCustomPrice;
-            this.settings.llmPriceInputCustom = defaultProfile.priceInput;
-            this.settings.llmPriceOutputCustom = defaultProfile.priceOutput;
+            // 删除旧字段，防止数据冗余并完成终极迭代 (使用 as any 将其从 settings 对象中彻底移除)
+            const legacyUrlField = `llm${config.labelKey}Url`;
+            const legacyKeyField = `llm${config.labelKey}Key`;
+            const legacyModelField = `llm${config.labelKey}Model`;
+            if ((this.settings as any)[legacyUrlField] !== undefined) { delete (this.settings as any)[legacyUrlField]; modified = true; }
+            if ((this.settings as any)[legacyKeyField] !== undefined) { delete (this.settings as any)[legacyKeyField]; modified = true; }
+            if ((this.settings as any)[legacyModelField] !== undefined) { delete (this.settings as any)[legacyModelField]; modified = true; }
+        });
 
-            await this.saveSettings();
-        }
+        // 清理全局冗余自定义价格字段
+        if ((this.settings as any).llmUseCustomPrice !== undefined) { delete (this.settings as any).llmUseCustomPrice; modified = true; }
+        if ((this.settings as any).llmPriceInputCustom !== undefined) { delete (this.settings as any).llmPriceInputCustom; modified = true; }
+        if ((this.settings as any).llmPriceOutputCustom !== undefined) { delete (this.settings as any).llmPriceOutputCustom; modified = true; }
+
+        if (modified) await this.saveSettings();
     }
 
 

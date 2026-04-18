@@ -140,13 +140,10 @@ class I18nSettingTab extends PluginSettingTab {
     llmDisplay() {
         this.contentEl.empty();
         new I18nLLM(this).display();
-        
+
         const llmApi = this.i18n.settings.llmApi;
-        // 统一使用通用组件渲染所有 AI 服务商 (1-16)
-        if (llmApi >= 1 && llmApi <= 16) {
-            new I18nLLMGeneric(this).display();
-        } else {
-            // 容错处理
+        // 渲染通用配置组件
+        if (llmApi) {
             new I18nLLMGeneric(this).display();
         }
     }

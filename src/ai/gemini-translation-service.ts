@@ -23,7 +23,7 @@ export class GeminiTranslationService extends BaseProvider {
     /** 覆写：返回当前 Gemini 模型名 */
     protected override getModelName(): string {
         const activeProfile = this.getActiveProfile();
-        return activeProfile?.model || useGlobalStoreInstance.getState().i18n.settings.llmGeminiModel || 'gemini-2.0-flash';
+        return activeProfile?.model || 'gemini-2.0-flash';
     }
 
     // ======================== 核心 API 调用 ========================
@@ -32,15 +32,18 @@ export class GeminiTranslationService extends BaseProvider {
      * 调用 Gemini API
      */
     private async callGemini(items: any[], systemPrompt: string, signal?: AbortSignal, maxRetries = 2): Promise<any[]> {
-        const settings = useGlobalStoreInstance.getState().i18n.settings;
         const activeProfile = this.getActiveProfile();
-
-        const apiKey = activeProfile?.key || settings.llmGeminiKey;
+        if (!activeProfile) throw new Error('Missing active profile for Gemini');
+        
+        const apiKey = activeProfile.key;
         const model = this.getModelName();
 
         if (!apiKey) throw new Error('请先配置 Gemini API Key');
 
-        const url = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`;
+        let baseUrl = activeProfile.url?.trim() || GEMINI_API_BASE;
+        baseUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+        
+        const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
 
         const requestBody = {
             contents: [
@@ -153,16 +156,20 @@ export class GeminiTranslationService extends BaseProvider {
         systemPrompt: string,
         signal?: AbortSignal
     ): Promise<string> {
-        const settings = useGlobalStoreInstance.getState().i18n.settings;
         const activeProfile = this.getActiveProfile();
-        const apiKey = activeProfile?.key || settings.llmGeminiKey;
+        if (!activeProfile) throw new Error('Missing active profile for Gemini');
+        
+        const apiKey = activeProfile.key;
         const model = this.getModelName();
 
         if (!apiKey) throw new Error('请先配置 Gemini API Key');
 
+        let baseUrl = activeProfile.url?.trim() || GEMINI_API_BASE;
+        baseUrl = baseUrl.replace(/\/+$/, ''); // Remove trailing slashes
+
         const userContent = `Source: ${source}\nBroken Translation: ${target}\nError: ${errorMessage}\n\nPlease return ONLY the fixed translation string.`;
 
-        const url = `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`;
+        const url = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
         const requestBody = {
             contents: [{ role: 'user', parts: [{ text: userContent }] }],
             systemInstruction: { parts: [{ text: systemPrompt }] },

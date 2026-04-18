@@ -126,7 +126,7 @@ export abstract class BaseProvider implements ITranslationProvider {
 
         const settings = useGlobalStoreInstance.getState().i18n.settings;
         const config = LLM_PROVIDERS[settings.llmApi];
-        return (settings as any)[config?.modelField] || config?.defaultModel || 'gpt-4o-mini';
+        return config?.defaultModel || 'gpt-4o-mini';
     }
 
     /** 获取并发限制数 */

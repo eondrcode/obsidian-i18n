@@ -43,6 +43,10 @@ export class DiagnosticModal extends Modal {
             { label: t('Settings.Ai.DiagItemTranslation'), item: this.report.translation },
         ];
 
+        if (this.report.concurrency) {
+            items.push({ label: t('Settings.Ai.DiagItemConcurrency'), item: this.report.concurrency });
+        }
+
         const listEl = contentEl.createDiv({ cls: 'diag-list' });
         for (const { label, item } of items) {
             this.renderRow(listEl, label, item);
@@ -110,9 +114,9 @@ export class DiagnosticModal extends Modal {
             right.createSpan({ text: `${item.latency}ms`, cls: 'diag-latency-tag' });
         }
 
-        const statusLabel = item.status === 'pass' ? 'PASS' :
-            item.status === 'fail' ? 'FAIL' :
-                item.status === 'warn' ? 'WARN' : '—';
+        const statusLabel = item.status === 'pass' ? t('Settings.Ai.DiagStatusPass') :
+            item.status === 'fail' ? t('Settings.Ai.DiagStatusFail') :
+                item.status === 'warn' ? t('Settings.Ai.DiagStatusWarn') : t('Settings.Ai.DiagStatusNA');
         right.createSpan({ text: statusLabel, cls: `diag-status-label diag-sl-${item.status}` });
 
         // 提示信息

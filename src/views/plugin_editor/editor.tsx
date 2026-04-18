@@ -29,7 +29,6 @@ import { MetadataCard } from './components/common/metadata-card';
 import { AstSidebar } from './components/ast/ast-sidebar';
 import { RegexSidebar } from './components/regex/regex-sidebar';
 import { TemplateCard } from './components/common/template-card';
-import { ContextPreview } from './components/common/context-preview';
 
 // ====================================================================================================
 // 子组件 & 辅助功能
@@ -988,32 +987,20 @@ const ReactEditor: React.FC<EditorProps> = (_) => {
 
                 {/* 中间：主内容编辑器区 */}
                 <ResizablePanel defaultSize={60} minSize={30} className="h-full">
-                    <ResizablePanelGroup direction="vertical" className="h-full">
-                        {/* 上方：翻译表格 */}
-                        <ResizablePanel defaultSize={75} minSize={40}>
-                            <main className="w-full h-full flex flex-col px-1 overflow-hidden bg-background/20">
-                                <div className="flex-1 min-h-0 overflow-hidden relative">
-                                    <TabsContent value="ast" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
-                                        <div className="h-full overflow-auto p-2 pt-0">
-                                            <AstEditor />
-                                        </div>
-                                    </TabsContent>
-                                    <TabsContent value="regex" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
-                                        <div className="h-full overflow-auto p-2 pt-0">
-                                            <RegexEditor />
-                                        </div>
-                                    </TabsContent>
+                    <main className="w-full h-full flex flex-col px-1 overflow-hidden bg-background/20">
+                        <div className="flex-1 min-h-0 overflow-hidden relative">
+                            <TabsContent value="ast" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
+                                <div className="h-full overflow-auto p-2 pt-0">
+                                    <AstEditor />
                                 </div>
-                            </main>
-                        </ResizablePanel>
-
-                        <ResizableHandle withHandle />
-
-                        {/* 下方：源码预览面板 */}
-                        <ResizablePanel defaultSize={25} minSize={10} maxSize={50}>
-                            <ContextPreview />
-                        </ResizablePanel>
-                    </ResizablePanelGroup>
+                            </TabsContent>
+                            <TabsContent value="regex" className="h-full m-0 overflow-hidden outline-none data-[state=active]:animate-in fade-in duration-300">
+                                <div className="h-full overflow-auto p-2 pt-0">
+                                    <RegexEditor />
+                                </div>
+                            </TabsContent>
+                        </div>
+                    </main>
                 </ResizablePanel>
 
                 <ResizableHandle withHandle />

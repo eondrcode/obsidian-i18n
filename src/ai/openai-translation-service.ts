@@ -27,21 +27,13 @@ export class OpenAITranslationService extends BaseProvider {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
         const activeProfile = this.getActiveProfile();
 
-        let baseURL: string | undefined = undefined;
-        let apiKey: string = "";
-
-        if (activeProfile) {
-            apiKey = activeProfile.key;
-            const rawUrl = normalizeOpenAIUrl(activeProfile.url || LLM_PROVIDERS[settings.llmApi]?.baseUrl || "");
-            baseURL = rawUrl || undefined;
-        } else {
-            // 回退到以前的单字段配置 (仅为了极致兼容)
-            const config = LLM_PROVIDERS[settings.llmApi];
-            if (config) {
-                apiKey = (settings as any)[config.keyField] as string;
-                baseURL = config.baseUrl;
-            }
+        if (!activeProfile) {
+            throw new Error("Missing active profile for the selected provider.");
         }
+
+        const apiKey = activeProfile.key;
+        const rawUrl = normalizeOpenAIUrl(activeProfile.url || LLM_PROVIDERS[settings.llmApi]?.baseUrl || "");
+        const baseURL = rawUrl || undefined;
 
         return new OpenAI({
             baseURL: baseURL,
@@ -100,8 +92,7 @@ export class OpenAITranslationService extends BaseProvider {
         const settings = useGlobalStoreInstance.getState().i18n.settings;
         const config = LLM_PROVIDERS[settings.llmApi];
         if (config) {
-            const model = (settings as any)[config.modelField] as string;
-            return model || config.defaultModel;
+            return config.defaultModel;
         }
         return 'gpt-4o-mini';
     }

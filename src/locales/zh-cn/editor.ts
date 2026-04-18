@@ -13,8 +13,7 @@ export default {
         Ai: "AI 智能翻译",
         Ast: "AST 编辑",
         Regex: "语法校验",
-        Metadata: "元数据",
-        ContextPreview: "源码预览"
+        Metadata: "元数据"
     },
     Labels: {
         SidebarViewOptions: "视图选项",
@@ -136,9 +135,7 @@ export default {
         ExtractSummary: "增量提取完成，新增 {{count}} 个条目",
         DiagnosisSuccess: "诊断完成：未发现导致语法错误的条目",
         NoItems: "无可翻译项",
-        NoNewItems: "未发现新的翻译条目",
-        SelectItemToPreview: "选中翻译条目以预览其在源码中的位置",
-        NoSourceCache: "当前文件暂无源码缓存，请先运行一次语法诊断"
+        NoNewItems: "未发现新的翻译条目"
     },
     Notices: {
         NoticePrefix: "编辑器",

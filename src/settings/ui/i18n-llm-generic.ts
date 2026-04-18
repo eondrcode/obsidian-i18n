@@ -19,10 +19,8 @@ export default class I18nLLMGeneric extends BaseSetting {
         this.profileUI();
         this.configUI();
 
-        // OpenAI 专属配置：响应格式
-        if (providerId === 1) {
-            this.openaiSpecialUI();
-        }
+        // 允许所有模型显式或者兜底式自选返回格式
+        this.openaiSpecialUI();
 
         this.priceUI();
         this.testUI();
@@ -147,8 +145,8 @@ export default class I18nLLMGeneric extends BaseSetting {
 
         // Base URL
         new Setting(this.containerEl)
-            .setName(providerId === 3 ? t('Settings.Ai.OllamaUrlTitle') : t('Settings.Ai.OpenaiUrlTitle'))
-            .setDesc(providerId === 3 ? t('Settings.Ai.OllamaUrlDesc') : t('Settings.Ai.OpenaiUrlDesc'))
+            .setName(providerId === 'ollama' ? t('Settings.Ai.OllamaUrlTitle') : t('Settings.Ai.OpenaiUrlTitle'))
+            .setDesc(providerId === 'ollama' ? t('Settings.Ai.OllamaUrlDesc') : t('Settings.Ai.OpenaiUrlDesc'))
             .addText(text => {
                 text.setValue(activeProfile.url || this.config.baseUrl || '')
                     .setPlaceholder(this.config.baseUrl || 'https://...')
@@ -158,8 +156,8 @@ export default class I18nLLMGeneric extends BaseSetting {
                     });
             });
 
-        // API Key (Ollama 3 通常不需要 Key)
-        if (providerId !== 3) {
+        // API Key (Ollama 通常不需要 Key)
+        if (providerId !== 'ollama') {
             new Setting(this.containerEl)
                 .setName(t(`Settings.Ai.${labelKey}KeyTitle` as any) || `${this.config.name} API Key`)
                 .setDesc(t('Settings.Ai.OpenaiKeyDescTip'))
@@ -188,10 +186,10 @@ export default class I18nLLMGeneric extends BaseSetting {
         // Model
         const modelSetting = new Setting(this.containerEl)
             .setName(t('Settings.Ai.ModelTitle'))
-            .setDesc(providerId === 3 ? t('Settings.Ai.OllamaModelDesc') : (t(`Settings.Ai.${labelKey}ModelDesc` as any) || t('Settings.Ai.ModelDesc')));
+            .setDesc(providerId === 'ollama' ? t('Settings.Ai.OllamaModelDesc') : (t(`Settings.Ai.${labelKey}ModelDesc` as any) || t('Settings.Ai.ModelDesc')));
 
         // Ollama 特有：刷新模型列表
-        if (providerId === 3) {
+        if (providerId === 'ollama') {
             modelSetting.addButton(btn => {
                 btn.setIcon('refresh-cw')
                     .setTooltip(t('Settings.Ai.OllamaFetchModelsBtn'))
@@ -214,35 +212,45 @@ export default class I18nLLMGeneric extends BaseSetting {
             });
         }
 
+        let textComp: any = null;
+
+        modelSetting.addText(text => {
+            textComp = text;
+            text.setValue(activeProfile.model || defaultModel)
+                .setPlaceholder(providerId === 'ollama' ? t('Settings.Ai.OllamaModelPlaceholder') : t('Settings.Ai.ModelInputPlaceholder'))
+                .onChange(async (value) => {
+                    activeProfile.model = value.trim();
+                    await this.i18n.saveSettings();
+                });
+        });
+
         modelSetting.addDropdown(async dropdown => {
             dropdown.addOption('', t('Settings.Ai.ModelSelectPlaceholder'));
 
             let finalModels = models;
-            if (providerId === 3) {
+            if (providerId === 'ollama') {
                 try {
                     finalModels = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
                 } catch { /* ignore */ }
             }
 
             finalModels.forEach(m => dropdown.addOption(m, m));
-            dropdown.setValue(activeProfile.model);
+
+            if (finalModels.includes(activeProfile.model)) {
+                dropdown.setValue(activeProfile.model);
+            }
+
             dropdown.onChange(async (value) => {
                 if (value) {
                     activeProfile.model = value;
+                    if (textComp) {
+                        textComp.setValue(value);
+                    }
                     await this.i18n.saveSettings();
-                    this.settingTab.llmDisplay();
                 }
             });
         });
 
-        modelSetting.addText(text => {
-            text.setValue(activeProfile.model || defaultModel)
-                .setPlaceholder(providerId === 3 ? t('Settings.Ai.OllamaModelPlaceholder') : t('Settings.Ai.ModelInputPlaceholder'))
-                .onChange(async (value) => {
-                    activeProfile.model = value.trim();
-                    await this.i18n.saveSettings();
-                });
-        });
     }
 
     private openaiSpecialUI(): void {
@@ -318,7 +326,7 @@ export default class I18nLLMGeneric extends BaseSetting {
                         const activeProfile = this.activeProfile;
                         if (!activeProfile) return;
 
-                        const isOllama = this.config.id === 3;
+                        const isOllama = this.config.id === 'ollama';
                         if (!isOllama && !activeProfile.key) {
                             new Notice(t('Settings.Ai.TestNoticeMissing'));
                             return;
@@ -328,6 +336,7 @@ export default class I18nLLMGeneric extends BaseSetting {
                             activeProfile.url || this.config.baseUrl || '',
                             activeProfile.key,
                             activeProfile.model || this.config.defaultModel,
+                            this.config.engine,
                             this.settings.llmResponseFormat,
                             this.settings.llmTimeout
                         );

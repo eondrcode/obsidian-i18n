@@ -10,28 +10,23 @@ import { ITranslationProvider } from './provider-types';
 import { OpenAITranslationService } from './openai-translation-service';
 import { GeminiTranslationService } from './gemini-translation-service';
 import { OllamaTranslationService } from './ollama-translation-service';
+import { LLM_PROVIDERS } from './constants';
 
 /**
  * 创建当前配置对应的翻译 Provider 实例
  */
 export function createTranslationProvider(): ITranslationProvider {
     const settings = useGlobalStoreInstance.getState().i18n.settings;
+    const config = LLM_PROVIDERS[settings.llmApi as string];
 
-    switch (settings.llmApi) {
-        case 1:
-        case 4:
-        case 5:
-        case 6:
-        case 7:
-        case 8:
-        case 9:
-        case 10:
-        case 11:
-            return new OpenAITranslationService();
-        case 2:
+    if (!config) return new OpenAITranslationService(); // 兜底
+
+    switch (config.engine) {
+        case 'gemini':
             return new GeminiTranslationService();
-        case 3:
+        case 'ollama':
             return new OllamaTranslationService();
+        case 'openai':
         default:
             return new OpenAITranslationService();
     }

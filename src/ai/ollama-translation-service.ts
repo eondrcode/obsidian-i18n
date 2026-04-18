@@ -26,13 +26,13 @@ export class OllamaTranslationService extends BaseProvider {
     /** 覆写：返回当前 Ollama 模型名 */
     protected override getModelName(): string {
         const activeProfile = this.getActiveProfile();
-        return activeProfile?.model || useGlobalStoreInstance.getState().i18n.settings.llmOllamaModel || 'qwen2.5';
+        return activeProfile?.model || 'qwen2.5';
     }
 
     /** 获取 Ollama 端点地址 */
     private getBaseUrl(): string {
         const activeProfile = this.getActiveProfile();
-        const url = activeProfile?.url || useGlobalStoreInstance.getState().i18n.settings.llmOllamaUrl || OLLAMA_DEFAULT_URL;
+        const url = activeProfile?.url || OLLAMA_DEFAULT_URL;
         return url.replace(/\/+$/, '');
     }
 
@@ -145,11 +145,21 @@ export class OllamaTranslationService extends BaseProvider {
 
     // ======================== 公共工具方法 ========================
 
+    private static modelsCache: Record<string, { models: string[], timestamp: number }> = {};
+
     /**
      * 从 Ollama 获取已安装的模型列表
      */
     public static async fetchModels(baseUrl?: string): Promise<string[]> {
         const url = (baseUrl || OLLAMA_DEFAULT_URL).replace(/\/+$/, '');
+
+        // 检查缓存
+        const now = Date.now();
+        const cached = this.modelsCache[url];
+        if (cached && now - cached.timestamp < 5 * 60 * 1000) {
+            return cached.models;
+        }
+
         try {
             const response = await requestUrl({
                 url: `${url}/api/tags`,
@@ -158,7 +168,9 @@ export class OllamaTranslationService extends BaseProvider {
             });
 
             if (response.status === 200 && response.json?.models) {
-                return response.json.models.map((m: any) => m.name || m.model);
+                const models = response.json.models.map((m: any) => m.name || m.model);
+                this.modelsCache[url] = { models, timestamp: now };
+                return models;
             }
             return [];
         } catch {

@@ -25,6 +25,7 @@ export interface DeepDiagnosticReport {
     jsonMode: DiagItem;
     jsonSchema: DiagItem;
     translation: DiagItem;
+    concurrency?: DiagItem;
     logs: DiagnosticLog[];
 }
 
@@ -32,14 +33,16 @@ export class ConnectivityTester {
     private url: string;
     private key: string;
     private model: string;
+    private engine: 'openai' | 'gemini' | 'ollama';
     private responseFormat: string;
     private timeout: number;
     private logs: DiagnosticLog[] = [];
 
-    constructor(url: string, key: string, model: string, responseFormat?: string, timeout?: number) {
+    constructor(url: string, key: string, model: string, engine?: 'openai' | 'gemini' | 'ollama', responseFormat?: string, timeout?: number) {
         this.url = (url || '').trim();
         this.key = key.trim();
         this.model = model.trim();
+        this.engine = engine || 'openai';
         this.responseFormat = responseFormat || 'text';
         this.timeout = timeout || 60000;
     }
@@ -60,27 +63,35 @@ export class ConnectivityTester {
             jsonMode: { status: 'na', value: '未连通' },
             jsonSchema: { status: 'na', value: '未连通' },
             translation: { status: 'na', value: '未连通' },
+            concurrency: { status: 'na', value: '未连通' },
             logs: this.logs
         };
 
         // --- Stage 1: Endpoint & Basic Network ---
-        this.addLog('Endpoint', `Testing connectivity to ${this.url}`);
+        this.addLog('Endpoint', `正在测试到 ${this.url} 的连通性 (引擎: ${this.engine})`);
         onProgress?.(t('Settings.Ai.TestStageNetwork'));
 
         const startTime = Date.now();
         const baseUrl = normalizeOpenAIUrl(this.url);
-        // 如果 url 为空，默认按 OpenAI 的测试地址
-        const testUrl = baseUrl || 'https://api.openai.com/v1';
+        // 根据引擎类型选择默认测试地址
+        const defaultUrls: Record<string, string> = {
+            openai: 'https://api.openai.com/v1',
+            gemini: 'https://generativelanguage.googleapis.com/v1beta/openai',
+            ollama: 'http://localhost:11434/v1'
+        };
+        const testUrl = baseUrl || defaultUrls[this.engine] || defaultUrls.openai;
 
         try {
             // 启发式检查
             if (this.url && !this.url.match(/^https?:\/\//)) {
                 report.endpoint.status = 'warn';
-                report.endpoint.tip = 'URL must start with http:// or https://';
+                report.endpoint.tip = 'URL 必须以 http:// 或 https:// 开头';
                 this.addLog('Endpoint', '协议异常 (请检查 http/https 头)', 'warn');
             }
 
-            const res = await this.safeRequest(`${testUrl}/models`, 'GET');
+            // Ollama 本地服务不走 /models 探测，而是直接 ping 根路径
+            const probeUrl = this.engine === 'ollama' ? `${testUrl.replace(/\/v1$/, '')}/api/tags` : `${testUrl}/models`;
+            const res = await this.safeRequest(probeUrl, 'GET', this.engine !== 'ollama');
             const latency = Date.now() - startTime;
             report.endpoint.latency = latency;
 
@@ -89,64 +100,93 @@ export class ConnectivityTester {
                 report.endpoint.value = `${testUrl} (${res.status})`;
                 this.addLog('Endpoint', `成功连通 (耗时: ${latency}ms, 状态码: ${res.status})`);
             } else if (res.status === 404) {
-                // 部分兼容的 API 可能未实现 /models，仅提示警告并继续
                 report.endpoint.status = 'warn';
                 report.endpoint.value = `${testUrl} (${res.status})`;
-                report.endpoint.tip = t('Settings.Ai.TestFail404') || '/models endpoint not found, continuing tests...';
-                this.addLog('Endpoint', `/models 端点未找到 (404)，忽略并继续以兼容非规范 API 代理...`, 'warn');
+                const tip404 = this.engine === 'gemini'
+                    ? '端点返回 404，Gemini 使用 /v1beta 路径，请确认接口地址正确'
+                    : (t('Settings.Ai.TestFail404') || '端点未找到，将继续后续测试...');
+                report.endpoint.tip = tip404;
+                this.addLog('Endpoint', `探测端点返回 404，忽略并继续...`, 'warn');
             } else if (res.status === 406) {
-                // 常见错误：用户填写了带有网页界面的根域名而不是具体带 /v1 的 API 地址
                 report.endpoint.status = 'fail';
                 report.endpoint.tip = '该地址返回了网页前端而非接口数据。通常是因为填成了官网地址或漏加了 /v1 路径';
                 report.endpoint.value = 'HTML 冲突';
                 report.overallStatus = 'failed';
-                this.addLog('Endpoint', `检测到 HTML：地址返回了网页而非标准的 JSON 接口数据，疑似截胡`, 'error');
+                this.addLog('Endpoint', `检测到 HTML 响应，地址可能配置为官网主页`, 'error');
                 return report;
             } else {
                 report.endpoint.status = 'fail';
                 report.endpoint.tip = t('Settings.Ai.TestFail404');
                 report.overallStatus = 'failed';
-                this.addLog('Endpoint', `无法连通或返回不符合周期的错误码: ${res.status}`, 'error');
+                this.addLog('Endpoint', `无法连通，返回状态码: ${res.status}`, 'error');
                 return report;
             }
         } catch (err: any) {
             report.endpoint.status = 'fail';
-            report.endpoint.tip = t('Settings.Ai.TestFailNetwork');
             report.overallStatus = 'failed';
-            this.addLog('Endpoint', `网络层握手崩溃: ${err.message}`, 'error');
+            // 精细化网络错误诊断
+            const msg = err.message || '';
+            if (msg.includes('ECONNREFUSED') || msg.includes('ERR_CONNECTION_REFUSED')) {
+                report.endpoint.tip = this.engine === 'ollama'
+                    ? 'Ollama 服务未启动或端口被占用。请确认已运行 ollama serve 并监听在正确端口。'
+                    : '目标服务器拒绝连接，请检查地址和端口是否正确。';
+                this.addLog('Endpoint', `连接被拒绝 (ECONNREFUSED): ${msg}`, 'error');
+            } else if (msg.includes('ENOTFOUND') || msg.includes('ERR_NAME_NOT_RESOLVED') || msg.includes('getaddrinfo')) {
+                report.endpoint.tip = '域名无法解析，请检查拼写或确认网络/代理规则已放行该域名。';
+                this.addLog('Endpoint', `DNS 解析失败: ${msg}`, 'error');
+            } else if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+                report.endpoint.tip = '连接超时，服务器无响应。请检查网络环境或是否需要配置代理。';
+                this.addLog('Endpoint', `连接超时: ${msg}`, 'error');
+            } else if (msg.includes('ERR_TLS') || msg.includes('CERT') || msg.includes('SSL')) {
+                report.endpoint.tip = 'TLS/SSL 证书校验失败，如使用自签名证书的代理可能引发此错误。';
+                this.addLog('Endpoint', `TLS 证书错误: ${msg}`, 'error');
+            } else {
+                report.endpoint.tip = t('Settings.Ai.TestFailNetwork');
+                this.addLog('Endpoint', `网络异常: ${msg}`, 'error');
+            }
             return report;
         }
 
         // --- Stage 2: Auth ---
         onProgress?.(t('Settings.Ai.TestStageAuth'));
         this.addLog('Auth', '尝试验证 API Key / Token 可用性');
-        const authStartTime = Date.now();
-        const authRes = await this.safeRequest(`${testUrl}/models`, 'GET', true);
-        report.auth.latency = Date.now() - authStartTime;
 
-        if (authRes.status === 200) {
+        // Ollama 本地部署通常无需鉴权，直接跳过
+        if (this.engine === 'ollama') {
             report.auth.status = 'pass';
-            report.auth.value = '有效';
-            this.addLog('Auth', 'API Key 校验通过 (受认可)');
-        } else if (authRes.status === 404 && report.endpoint.status === 'warn') {
-            report.auth.status = 'warn';
-            report.auth.value = '跳过 (404)';
-            report.auth.tip = 'Authentication will be verified in subsequent chat tests';
-            this.addLog('Auth', '缺少 /models 端点，被迫跳过鉴权，将在下一步补偿', 'warn');
+            report.auth.value = '本地服务 (免鉴权)';
+            report.auth.latency = 0;
+            this.addLog('Auth', 'Ollama 本地引擎，跳过 API Key 鉴权');
         } else {
-            report.auth.status = 'fail';
-            report.auth.value = `Error ${authRes.status}`;
-            report.auth.tip = authRes.status === 401 ? t('Settings.Ai.TestFail401') : (authRes.status === 429 ? t('Settings.Ai.DiagTipQuota') : t('Settings.Ai.TestFailUnknown'));
-            report.overallStatus = 'failed';
-            this.addLog('Auth', `身份鉴权失败，服务器拒绝接入，状态码: ${authRes.status}`, 'error');
-            return report;
+            const authStartTime = Date.now();
+            const authProbeUrl = `${testUrl}/models`;
+            const authRes = await this.safeRequest(authProbeUrl, 'GET', true);
+            report.auth.latency = Date.now() - authStartTime;
+
+            if (authRes.status === 200) {
+                report.auth.status = 'pass';
+                report.auth.value = '有效';
+                this.addLog('Auth', 'API Key 校验通过');
+            } else if (authRes.status === 404 && report.endpoint.status === 'warn') {
+                report.auth.status = 'warn';
+                report.auth.value = '跳过 (404)';
+                report.auth.tip = '鉴权端点不可用，将在后续对话测试中验证密钥有效性';
+                this.addLog('Auth', '缺少 /models 端点，跳过鉴权，将在后续步骤中补偿', 'warn');
+            } else {
+                report.auth.status = 'fail';
+                report.auth.value = `错误 ${authRes.status}`;
+                report.auth.tip = authRes.status === 401 ? t('Settings.Ai.TestFail401') : (authRes.status === 429 ? t('Settings.Ai.DiagTipQuota') : t('Settings.Ai.TestFailUnknown'));
+                report.overallStatus = 'failed';
+                this.addLog('Auth', `身份鉴权失败，状态码: ${authRes.status}`, 'error');
+                return report;
+            }
         }
 
         // --- Stage 3: Model Availability ---
         if (!this.model) {
             report.model.status = 'warn';
-            report.model.tip = 'No model name provided';
-            this.addLog('Model', '未填写模型名称编码，放弃针对特定模型的专项联通检测', 'warn');
+            report.model.tip = '未填写模型名称，跳过模型可用性检测';
+            this.addLog('Model', '未填写模型名称，跳过模型可用性检测', 'warn');
             return report;
         }
 
@@ -365,6 +405,55 @@ export class ConnectivityTester {
             report.translation.tip = err.message?.includes('timeout') ? t('Settings.Ai.TestFailTimeout') : t('Settings.Ai.DiagTipTranslationFail');
             report.overallStatus = 'failed';
             this.addLog('Translation', `全链路测试握手直接抛出底层请求错误: ${err.message}`, 'error');
+        }
+
+        // --- Stage 7: Concurrency Burst Test ---
+        if (report.translation.status === 'pass') {
+            onProgress?.(t('Settings.Ai.DiagStageConcurrency'));
+            this.addLog('Concurrency', '正在模拟并发连发以探测频率限制...');
+
+            const burstCount = 3;
+            const burstStart = Date.now();
+            try {
+                const burstBody = {
+                    model: this.model,
+                    messages: [{ role: 'user', content: 'hi' }],
+                    max_tokens: 1
+                };
+                const burstPromises = Array.from({ length: burstCount }, () =>
+                    this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, burstBody)
+                );
+                const burstResults = await Promise.all(burstPromises);
+                report.concurrency!.latency = Date.now() - burstStart;
+
+                const has429 = burstResults.some(r => r.status === 429);
+                const allOk = burstResults.every(r => r.status === 200);
+
+                if (allOk) {
+                    report.concurrency!.status = 'pass';
+                    report.concurrency!.value = `${burstCount} 并发全部通过`;
+                    this.addLog('Concurrency', `${burstCount} 个并发请求全部成功 (${report.concurrency!.latency}ms)`);
+                } else if (has429) {
+                    report.concurrency!.status = 'warn';
+                    report.concurrency!.value = '触发频率限制 (429)';
+                    report.concurrency!.tip = t('Settings.Ai.DiagTipConcurrency');
+                    report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
+                    this.addLog('Concurrency', `${burstCount} 并发中检测到 429 频率限制，建议降低并发数`, 'warn');
+                } else {
+                    const statuses = burstResults.map(r => r.status).join(', ');
+                    report.concurrency!.status = 'warn';
+                    report.concurrency!.value = `部分异常 (${statuses})`;
+                    report.concurrency!.tip = '并发请求部分失败，批量翻译可能不稳定';
+                    report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
+                    this.addLog('Concurrency', `并发测试返回混合状态: ${statuses}`, 'warn');
+                }
+            } catch (err: any) {
+                report.concurrency!.status = 'warn';
+                report.concurrency!.value = '测试异常';
+                report.concurrency!.tip = '并发测试过程中出错，无法判定频率限制情况';
+                report.concurrency!.latency = Date.now() - burstStart;
+                this.addLog('Concurrency', `并发测试异常: ${err.message}`, 'warn');
+            }
         }
 
         return report;
