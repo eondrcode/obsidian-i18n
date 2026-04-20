@@ -4,16 +4,19 @@ import { normalizeOpenAIUrl } from "./url-helper";
 import { parseTranslationResponse } from "./response-parser";
 
 export interface DiagItem {
-    status: 'pass' | 'fail' | 'warn' | 'na';
+    status: 'pass' | 'fail' | 'warn' | 'na' | 'testing';
     value: string;
     latency?: number;
     tip?: string;
+    rawResponse?: string;
+    usage?: { prompt: number; completion: number };
 }
 
 export interface DiagnosticLog {
     stage: string;
     message: string;
     level: 'info' | 'warn' | 'error';
+    details?: string;
 }
 
 export interface DeepDiagnosticReport {
@@ -25,6 +28,7 @@ export interface DeepDiagnosticReport {
     jsonMode: DiagItem;
     jsonSchema: DiagItem;
     translation: DiagItem;
+    translationFix?: DiagItem;
     concurrency?: DiagItem;
     logs: DiagnosticLog[];
 }
@@ -36,23 +40,43 @@ export class ConnectivityTester {
     private engine: 'openai' | 'gemini' | 'ollama';
     private responseFormat: string;
     private timeout: number;
+    private language: string;
+    private style: string;
     private logs: DiagnosticLog[] = [];
 
-    constructor(url: string, key: string, model: string, engine?: 'openai' | 'gemini' | 'ollama', responseFormat?: string, timeout?: number) {
+    constructor(url: string, key: string, model: string, engine?: 'openai' | 'gemini' | 'ollama', responseFormat?: string, timeout?: number, language?: string, style?: string) {
         this.url = (url || '').trim();
-        this.key = key.trim();
-        this.model = model.trim();
+        this.key = (key || '').trim();
+        this.model = (model || '').trim();
         this.engine = engine || 'openai';
         this.responseFormat = responseFormat || 'text';
         this.timeout = timeout || 60000;
+        this.language = language || '简体中文';
+        this.style = style || 'Technical';
     }
 
-    private addLog(stage: string, message: string, level: 'info' | 'warn' | 'error' = 'info') {
-        this.logs.push({ stage, message, level });
-        console.log(`[Diagnostic][${stage}] ${message}`);
+    private addLog(stage: string, message: string, level: 'info' | 'warn' | 'error' = 'info', details?: string) {
+        this.logs.push({ stage, message, level, details });
+        console.log(`[Diagnostic][${stage}] ${message}${details ? ' | Details: ' + details : ''}`);
     }
 
-    async runDeepDiagnostic(onProgress?: (msg: string) => void): Promise<DeepDiagnosticReport> {
+    public getInitialReport(): DeepDiagnosticReport {
+        return {
+            overallStatus: 'warning',
+            endpoint: { status: 'na', value: this.url },
+            auth: { status: 'na', value: '***' },
+            model: { status: 'na', value: this.model || 'N/A' },
+            systemRole: { status: 'na', value: '等待中' },
+            jsonMode: { status: 'na', value: '等待中' },
+            jsonSchema: { status: 'na', value: '等待中' },
+            translation: { status: 'na', value: '等待中' },
+            translationFix: { status: 'na', value: '等待中' },
+            concurrency: { status: 'na', value: '等待中' },
+            logs: this.logs
+        };
+    }
+
+    async runDeepDiagnostic(onProgress?: (report: DeepDiagnosticReport) => void): Promise<DeepDiagnosticReport> {
         this.logs = [];
         const report: DeepDiagnosticReport = {
             overallStatus: 'healthy',
@@ -63,13 +87,15 @@ export class ConnectivityTester {
             jsonMode: { status: 'na', value: '未连通' },
             jsonSchema: { status: 'na', value: '未连通' },
             translation: { status: 'na', value: '未连通' },
+            translationFix: { status: 'na', value: '未连通' },
             concurrency: { status: 'na', value: '未连通' },
             logs: this.logs
         };
 
         // --- Stage 1: Endpoint & Basic Network ---
+        report.endpoint.status = 'testing';
+        onProgress?.(report);
         this.addLog('Endpoint', `正在测试到 ${this.url} 的连通性 (引擎: ${this.engine})`);
-        onProgress?.(t('Settings.Ai.TestStageNetwork'));
 
         const startTime = Date.now();
         const baseUrl = normalizeOpenAIUrl(this.url);
@@ -109,16 +135,21 @@ export class ConnectivityTester {
                 this.addLog('Endpoint', `探测端点返回 404，忽略并继续...`, 'warn');
             } else if (res.status === 406) {
                 report.endpoint.status = 'fail';
-                report.endpoint.tip = '该地址返回了网页前端而非接口数据。通常是因为填成了官网地址或漏加了 /v1 路径';
-                report.endpoint.value = 'HTML 冲突';
+                report.endpoint.tip = '检测到非 API 响应（收到 HTML 网页）。这通常是因为：\n1. 误填了服务商官网地址（如 https://openai.com）\n2. 接口路径不完整（确保包含 /v1 或对应后缀）\n3. 代理服务器（如 Clash）拦截并返回了登录/验证页面';
+                report.endpoint.value = `响应格式冲突 (${res.status})`;
+                report.endpoint.rawResponse = res.text?.substring(0, 800);
                 report.overallStatus = 'failed';
-                this.addLog('Endpoint', `检测到 HTML 响应，地址可能配置为官网主页`, 'error');
+                this.addLog('Endpoint', `检测到 HTML 网页内容，请检查接口地址是否配置为官网主页`, 'error');
+                onProgress?.(report);
                 return report;
             } else {
                 report.endpoint.status = 'fail';
-                report.endpoint.tip = t('Settings.Ai.TestFail404');
+                report.endpoint.tip = res.status === 404 ? '接口路径未找到 (404)。请确认地址是否包含 /v1 或服务商要求的特定后缀。' : `服务器返回异常状态码: ${res.status}`;
+                report.endpoint.value = `HTTP ${res.status}`;
+                report.endpoint.rawResponse = res.text?.substring(0, 800);
                 report.overallStatus = 'failed';
-                this.addLog('Endpoint', `无法连通，返回状态码: ${res.status}`, 'error');
+                this.addLog('Endpoint', `请求失败，服务器返回状态码: ${res.status}`, 'error', res.text?.substring(0, 800));
+                onProgress?.(report);
                 return report;
             }
         } catch (err: any) {
@@ -128,27 +159,40 @@ export class ConnectivityTester {
             const msg = err.message || '';
             if (msg.includes('ECONNREFUSED') || msg.includes('ERR_CONNECTION_REFUSED')) {
                 report.endpoint.tip = this.engine === 'ollama'
-                    ? 'Ollama 服务未启动或端口被占用。请确认已运行 ollama serve 并监听在正确端口。'
-                    : '目标服务器拒绝连接，请检查地址和端口是否正确。';
+                    ? 'Ollama 服务连接失败。请确认 Ollama 已启动（ollama serve）且监听端口正确。'
+                    : '目标服务器拒绝连接。请检查：\n1. 接口地址和端口是否正确\n2. 如果使用了代理（如 Clash/V2Ray），请确认其工作正常\n3. 检查插件内的“网络代理”设置是否配置正确';
+                report.endpoint.value = '连接被拒绝';
+                report.endpoint.rawResponse = msg;
                 this.addLog('Endpoint', `连接被拒绝 (ECONNREFUSED): ${msg}`, 'error');
             } else if (msg.includes('ENOTFOUND') || msg.includes('ERR_NAME_NOT_RESOLVED') || msg.includes('getaddrinfo')) {
-                report.endpoint.tip = '域名无法解析，请检查拼写或确认网络/代理规则已放行该域名。';
+                report.endpoint.tip = '域名解析失败。请检查：\n1. 地址拼写是否正确\n2. 当前网络或代理环境是否可以解析该域名';
+                report.endpoint.value = 'DNS 解析失败';
+                report.endpoint.rawResponse = msg;
                 this.addLog('Endpoint', `DNS 解析失败: ${msg}`, 'error');
             } else if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
-                report.endpoint.tip = '连接超时，服务器无响应。请检查网络环境或是否需要配置代理。';
+                report.endpoint.tip = '请求超时。可能原因：\n1. 需配置系统代理或插件内部代理\n2. 服务商由于地理位置原因无法直接访问\n3. 代理节点响应过慢';
+                report.endpoint.value = '连接超时';
+                report.endpoint.rawResponse = msg;
                 this.addLog('Endpoint', `连接超时: ${msg}`, 'error');
             } else if (msg.includes('ERR_TLS') || msg.includes('CERT') || msg.includes('SSL')) {
-                report.endpoint.tip = 'TLS/SSL 证书校验失败，如使用自签名证书的代理可能引发此错误。';
-                this.addLog('Endpoint', `TLS 证书错误: ${msg}`, 'error');
+                report.endpoint.tip = '证书校验失败（SSL/TLS）。这通常是因为：\n1. 开启了代理软件的“HTTPS 劫持/解析”功能\n2. 使用了自签名证书的中转接口\n3. 系统根证书库缺失';
+                report.endpoint.value = '安全证书错误';
+                report.endpoint.rawResponse = msg;
+                this.addLog('Endpoint', `TLS 证书握手失败: ${msg}`, 'error');
             } else {
-                report.endpoint.tip = t('Settings.Ai.TestFailNetwork');
-                this.addLog('Endpoint', `网络异常: ${msg}`, 'error');
+                report.endpoint.tip = `底层网络异常: ${msg}。建议检查网络环境或尝试更换代理节点。`;
+                report.endpoint.value = '网络异常';
+                report.endpoint.rawResponse = err instanceof Error ? (err.stack || msg) : msg;
+                this.addLog('Endpoint', `底层网络异常: ${msg}`, 'error', err instanceof Error ? err.stack : undefined);
             }
+            onProgress?.(report);
             return report;
         }
+        onProgress?.(report);
 
         // --- Stage 2: Auth ---
-        onProgress?.(t('Settings.Ai.TestStageAuth'));
+        report.auth.status = 'testing';
+        onProgress?.(report);
         this.addLog('Auth', '尝试验证 API Key / Token 可用性');
 
         // Ollama 本地部署通常无需鉴权，直接跳过
@@ -174,13 +218,24 @@ export class ConnectivityTester {
                 this.addLog('Auth', '缺少 /models 端点，跳过鉴权，将在后续步骤中补偿', 'warn');
             } else {
                 report.auth.status = 'fail';
-                report.auth.value = `错误 ${authRes.status}`;
-                report.auth.tip = authRes.status === 401 ? t('Settings.Ai.TestFail401') : (authRes.status === 429 ? t('Settings.Ai.DiagTipQuota') : t('Settings.Ai.TestFailUnknown'));
+                report.auth.value = `HTTP ${authRes.status}`;
+                if (authRes.status === 401) {
+                    report.auth.tip = '鉴权失败 (401)。请检查：\n1. API Key 填写是否正确（注意不要包含多余空格）\n2. 该密钥是否已被禁用或额度已用尽';
+                } else if (authRes.status === 403) {
+                    report.auth.tip = '访问受限 (403)。请检查：\n1. 该密钥是否有权访问对应模型\n2. 账号是否存在地区访问限制（需配合代理）';
+                } else if (authRes.status === 429) {
+                    report.auth.tip = '配额耗尽或频率受限 (429)。请确认您的账户余额或降低并发请求数。';
+                } else {
+                    report.auth.tip = `鉴权端点返回意外状态码: ${authRes.status}`;
+                }
+                report.auth.rawResponse = authRes.text?.substring(0, 1000);
                 report.overallStatus = 'failed';
-                this.addLog('Auth', `身份鉴权失败，状态码: ${authRes.status}`, 'error');
+                this.addLog('Auth', `身份鉴权失败，状态码: ${authRes.status}`, 'error', authRes.text?.substring(0, 1000));
+                onProgress?.(report);
                 return report;
             }
         }
+        onProgress?.(report);
 
         // --- Stage 3: Model Availability ---
         if (!this.model) {
@@ -190,7 +245,8 @@ export class ConnectivityTester {
             return report;
         }
 
-        onProgress?.(t('Settings.Ai.TestStageModel'));
+        report.model.status = 'testing';
+        onProgress?.(report);
         this.addLog('Model', `探测所选模型服务节点: [${this.model}]`);
 
         const modelStartTime = Date.now();
@@ -206,14 +262,25 @@ export class ConnectivityTester {
             this.addLog('Model', `模型 ${this.model} 通道畅通，已能够生成对话`);
         } else {
             report.model.status = 'fail';
-            report.model.tip = modelRes.status === 404 ? t('Settings.Ai.TestFail404') : t('Settings.Ai.TestFailModel');
+            report.model.value = `HTTP ${modelRes.status}`;
+            if (modelRes.status === 404) {
+                report.model.tip = `找不到模型 "${this.model}" (404)。请确模型名称拼写无误，且您的账号有权通过 API 访问该模型。`;
+            } else if (modelRes.status === 400) {
+                report.model.tip = '请求格式错误 (400)。可能原因：\n1. 模型名称不正确\n2. 该模型不支持 /chat/completions 接口';
+            } else {
+                report.model.tip = `模型探针返回错误码: ${modelRes.status}`;
+            }
+            report.model.rawResponse = modelRes.text?.substring(0, 1000);
             report.overallStatus = 'failed';
-            this.addLog('Model', `向模型发送探针被拒绝或找不到该模型，状态码 ${modelRes.status}`, 'error');
+            this.addLog('Model', `向模型发送探针被拒绝或找不到该模型，状态码 ${modelRes.status}`, 'error', modelRes.text?.substring(0, 1000));
+            onProgress?.(report);
             return report;
         }
+        onProgress?.(report);
 
         // --- Stage 3.5: System Role Support ---
-        onProgress?.(t('Settings.Ai.DiagStageSystemRole'));
+        report.systemRole.status = 'testing';
+        onProgress?.(report);
         this.addLog('SystemRole', '投递包含 system 前置角色的对白以测试其服从度');
 
         const sysRoleStartTime = Date.now();
@@ -237,10 +304,12 @@ export class ConnectivityTester {
             report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
             this.addLog('SystemRole', `模型拒绝了 system 角色扮演输入 (${sysRoleRes.status})`, 'warn');
         }
+        onProgress?.(report);
 
         // --- Stage 4: JSON Mode Test ---
+        report.jsonMode.status = 'testing';
+        onProgress?.(report);
         this.addLog('Capabilities', '探测原生 JSON_OBJECT 强制输出特性适配程度');
-        onProgress?.(`${t('Settings.Ai.DiagItemJsonMode')}…`);
         const jsonModeRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, {
             model: this.model,
             messages: [{ role: 'user', content: 'respond with json: {"ok":true}' }],
@@ -257,10 +326,12 @@ export class ConnectivityTester {
             report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
             this.addLog('Capabilities', `模型明确拒绝或不支持 JSON 模式强制约束，状态码: ${jsonModeRes.status}`, 'warn');
         }
+        onProgress?.(report);
 
         // --- Stage 5: Structured Outputs (JSON Schema) Test ---
+        report.jsonSchema.status = 'testing';
+        onProgress?.(report);
         this.addLog('Capabilities', '探测高级特性：结构化输出 (JSON Schema 严格遵循)');
-        onProgress?.(`${t('Settings.Ai.DiagItemJsonSchema')}…`);
         const jsonSchemaRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, {
             model: this.model,
             messages: [{ role: 'user', content: 'respond with schema' }],
@@ -285,9 +356,11 @@ export class ConnectivityTester {
             report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
             this.addLog('Capabilities', `高级结构化输出功能遭拒或未实现，降级为常规生成 ${jsonSchemaRes.status}`, 'warn');
         }
+        onProgress?.(report);
 
         // --- Stage 6: Translation Simulation (End-to-End) ---
-        onProgress?.(t('Settings.Ai.DiagStageTranslation'));
+        report.translation.status = 'testing';
+        onProgress?.(report);
         this.addLog('Translation', '发起微型翻译沙盒进行 E2E 全链路终极模拟...');
 
         const translationBody: any = {
@@ -295,14 +368,17 @@ export class ConnectivityTester {
             messages: [
                 {
                     role: 'system',
-                    content: 'You are a translator. Translate the input JSON array. Each object has "i" (id, keep unchanged) and "s" (source text). Return a JSON array where each object has "i" and "t" (translated text). Target language: 简体中文. ONLY return the JSON array, no other text.'
+                    content: `You are a translator. Translate the input JSON array. Each object has "i" (id, keep unchanged) and "s" (source text). Return a JSON array where each object has "i" and "t" (translated text). Target language: ${this.language}. Style: ${this.style}. ONLY return the JSON array, no other text.`
                 },
                 {
                     role: 'user',
-                    content: JSON.stringify([{ i: 1, s: "Settings" }, { i: 2, s: "Cancel" }])
+                    content: JSON.stringify([
+                        { i: 1, s: "Settings for ${filename}" },
+                        { i: 2, s: "\\u2728 Shiny" }
+                    ])
                 }
             ],
-            max_tokens: 100,
+            max_tokens: 150,
             temperature: 0.3,
         };
 
@@ -344,16 +420,20 @@ export class ConnectivityTester {
 
             if (transRes.status !== 200) {
                 report.translation.status = 'fail';
-                // 添加针对格式相关的 400 错误的强引导
+                report.translation.value = `HTTP ${transRes.status}`;
+                let errBody: any = null;
+                try { errBody = typeof transRes.json === 'object' ? transRes.json : JSON.parse(transRes.text); } catch { }
+                const errMsg = errBody?.error?.message || errBody?.message || '';
+
                 if (transRes.status === 400 && this.responseFormat !== 'text') {
-                    report.translation.tip = `API 返回 ${transRes.status}。这通常是因为当前模型不支持所选的响应格式 (${this.responseFormat})，请尝试改为 Text。`;
+                    report.translation.tip = `请求被拒绝 (400)。极大概率是该模型不支持 "${this.responseFormat}" 响应格式。建议将其改为 Text 模式重试。` + (errMsg ? `\n详情: ${errMsg}` : '');
                 } else {
-                    report.translation.tip = `API 返回 ${transRes.status}`;
+                    report.translation.tip = `翻译请求失败 (${transRes.status})。` + (errMsg ? `说明: ${errMsg}` : '请检查网络或模型配额。');
                 }
+                report.translation.rawResponse = transRes.text?.substring(0, 1000);
                 report.overallStatus = 'failed';
-                this.addLog('Translation', `翻译沙盒全链路模拟失败，网关或模型返回异常状态码: ${transRes.status}`, 'error');
+                this.addLog('Translation', `翻译模拟请求失败，状态码: ${transRes.status}`, 'error', transRes.text?.substring(0, 1000));
             } else {
-                // 尝试解析返回内容 (引入统一的三级自愈机制)
                 let parseSuccess = false;
                 try {
                     const body = typeof transRes.json === 'object' ? transRes.json : JSON.parse(transRes.text);
@@ -363,7 +443,7 @@ export class ConnectivityTester {
                         try {
                             resultArray = parseTranslationResponse(content);
                         } catch (e: any) {
-                            this.addLog('Translation', `三级自愈解析器通报：数据格式受损严重，强制抢救时抛出异常: ${e.message}`, 'warn');
+                            this.addLog('Translation', `格式修复引擎通报：检测到非标准响应载荷，正在尝试强制抢救...`, 'warn');
                         }
 
                         if (resultArray && resultArray.length > 0) {
@@ -375,41 +455,113 @@ export class ConnectivityTester {
                             if (hasCorrectFields && idsMatch) {
                                 parseSuccess = true;
                                 report.translation.status = 'pass';
-                                report.translation.value = `OK (${transLatency}ms)`;
-                                this.addLog('Translation', `✔ 沙盒全链路通过：系统成功捕获并重组出 ${resultArray.length} 条翻译元数据 (经三级自愈体系处理)，响应耗时 ${transLatency}ms`);
+                                report.translation.value = `✔ 通过 (${transLatency}ms)`;
+                                this.addLog('Translation', `✔ 沙盒全链路通过：成功捕获并重组出 ${resultArray.length} 条元数据，响应耗时 ${transLatency}ms`);
+
+                                if (transRes.json?.usage) {
+                                    report.translation.usage = {
+                                        prompt: transRes.json.usage.prompt_tokens,
+                                        completion: transRes.json.usage.completion_tokens
+                                    };
+                                }
                             }
                         }
                     }
                 } catch (e: any) {
-                    this.addLog('Translation', `底层提取极其恶劣的返回载荷时直接崩溃 (不属于常规 JSON 解析错): ${e.message}`, 'error');
+                    this.addLog('Translation', `底层提取内容时发生解析错: ${e.message}`, 'error');
                 }
 
                 if (!parseSuccess) {
                     report.translation.status = 'fail';
-                    report.translation.tip = t('Settings.Ai.DiagTipTranslationFail');
+                    report.translation.value = '格式解析失败';
+                    const rawBody = typeof transRes.json === 'object' ? JSON.stringify(transRes.json, null, 2) : transRes.text;
+                    let contentPreview = '';
+                    try {
+                        const body = typeof transRes.json === 'object' ? transRes.json : JSON.parse(transRes.text);
+                        contentPreview = body?.choices?.[0]?.message?.content || '';
+                    } catch { }
+
+                    report.translation.tip = `模型返回了无法被解析的内容。当前选择格式: "${this.responseFormat}"。\n模型实际输出预览: "${contentPreview.substring(0, 200)}..."\n建议: 若模型输出了大量非 JSON 文字，请确认其是否支持 JSON 模式，或改用 Text 格式。`;
+                    report.translation.rawResponse = rawBody;
                     report.overallStatus = 'failed';
-                    this.addLog('Translation', '模型生成了毫无逻辑的随机废话格式，数据彻底断裂，无法重组出任何翻译项目', 'error');
+                    this.addLog('Translation', '模型生成的内容无法解析，请检查服务商返回的数据或响应格式是否正确。', 'error', rawBody);
                 }
 
-                // 延迟预警：如果简单 2 条翻译已接近超时阈值的 80%
                 if (parseSuccess && transLatency > this.timeout * 0.8) {
                     report.translation.status = 'warn';
                     report.translation.tip = t('Settings.Ai.DiagTipLatencyWarn');
                     report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
-                    this.addLog('Translation', `速率警报：最简单的模拟请求已消耗 ${transLatency}ms，极度逼近硬性超时极值 ${this.timeout}ms，批量实兵翻译时大概率会崩盘。`, 'warn');
+                    this.addLog('Translation', `速率警报：模拟请求已消耗 ${transLatency}ms，逼近超时极值 ${this.timeout}ms。`, 'warn');
                 }
             }
         } catch (err: any) {
             report.translation.status = 'fail';
             report.translation.latency = Date.now() - transStartTime;
-            report.translation.tip = err.message?.includes('timeout') ? t('Settings.Ai.TestFailTimeout') : t('Settings.Ai.DiagTipTranslationFail');
+            const msg = err.message || '';
+            if (msg.includes('timeout')) {
+                report.translation.tip = `翻译模拟请求超时 (${this.timeout}ms)。可能是网络链路过慢或服务器响应迟钝。`;
+                report.translation.value = '超时';
+            } else {
+                report.translation.tip = `请求过程发生异常: ${msg}`;
+                report.translation.value = '异常';
+            }
+            report.translation.rawResponse = err instanceof Error ? (err.stack || msg) : msg;
             report.overallStatus = 'failed';
-            this.addLog('Translation', `全链路测试握手直接抛出底层请求错误: ${err.message}`, 'error');
+            this.addLog('Translation', `全链路测试直接抛出底层请求错误: ${err.message}`, 'error');
         }
+        onProgress?.(report);
+
+        // --- Stage 6.5: Fix Function Simulation ---
+        report.translationFix!.status = 'testing';
+        onProgress?.(report);
+        this.addLog('Fix', '探测单条翻译修复（Fix API）链路响应质量');
+
+        const fixStartTime = Date.now();
+        const fixBody = {
+            model: this.model,
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a Translation Repair Specialist. Return ONLY the fixed translation string for ${this.language}. No explanations.`
+                },
+                {
+                    role: 'user',
+                    content: 'Source: "Save changes"; Broken: "保存 [错误]"; Error: "Bracket mismatch"'
+                }
+            ],
+            max_tokens: 50,
+            temperature: 0.3
+        };
+
+        try {
+            const fixRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, fixBody);
+            report.translationFix!.latency = Date.now() - fixStartTime;
+            if (fixRes.status === 200) {
+                const content = (fixRes.json?.choices?.[0]?.message?.content || fixRes.text || '').trim();
+                if (content && content.length < 100) {
+                    report.translationFix!.status = 'pass';
+                    report.translationFix!.value = `✔ 通过 (${report.translationFix!.latency}ms)`;
+                    this.addLog('Fix', '修复链路握手成功，模型能够产出纯净的单条修正建议');
+                } else {
+                    report.translationFix!.status = 'warn';
+                    report.translationFix!.tip = '修复链路返回内容过多或格式不纯。这可能会影响翻译修复的准确度。';
+                    this.addLog('Fix', '修复链路响应异常，建议检查 Prompt 是否被模型误解', 'warn');
+                }
+            } else {
+                report.translationFix!.status = 'fail';
+                report.translationFix!.tip = `修复请求失败 (${fixRes.status})。请确认模型是否支持短文本对答。`;
+                this.addLog('Fix', `修复链路测试失败，状态码: ${fixRes.status}`, 'error');
+            }
+        } catch (err: any) {
+            report.translationFix!.status = 'fail';
+            this.addLog('Fix', `修复链路请求崩溃: ${err.message}`, 'error');
+        }
+        onProgress?.(report);
 
         // --- Stage 7: Concurrency Burst Test ---
         if (report.translation.status === 'pass') {
-            onProgress?.(t('Settings.Ai.DiagStageConcurrency'));
+            report.concurrency!.status = 'testing';
+            onProgress?.(report);
             this.addLog('Concurrency', '正在模拟并发连发以探测频率限制...');
 
             const burstCount = 3;
@@ -454,6 +606,7 @@ export class ConnectivityTester {
                 report.concurrency!.latency = Date.now() - burstStart;
                 this.addLog('Concurrency', `并发测试异常: ${err.message}`, 'warn');
             }
+            onProgress?.(report);
         }
 
         return report;
@@ -477,7 +630,7 @@ export class ConnectivityTester {
             if (res.status >= 200 && res.status < 300 && res.text) {
                 const head = res.text.trim().toLowerCase();
                 if (head.startsWith('<!doctype') || head.startsWith('<html')) {
-                    this.addLog('Network', `高危拦截！向 ${url} 请求时却收到了巨长的一坨 HTML 网页代码，鉴定为错误配成了官网地址或漏加了 /v1 路径。当场拦截变造为 406 并阻断后续蠢事。`, 'warn');
+                    this.addLog('Network', `安全降级拦截：向 ${url} 请求时收到 HTML 载荷。判断为接口地址配置错误（可能误填为官网主页），已自动阻断后续无效请求。`, 'warn');
                     return { status: 406, text: res.text, json: undefined } as any;
                 }
             }

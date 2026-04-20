@@ -332,19 +332,29 @@ export default class I18nLLMGeneric extends BaseSetting {
                             return;
                         }
 
-                        const tester = new ConnectivityTester(
-                            activeProfile.url || this.config.baseUrl || '',
-                            activeProfile.key,
-                            activeProfile.model || this.config.defaultModel,
-                            this.config.engine,
-                            this.settings.llmResponseFormat,
-                            this.settings.llmTimeout
-                        );
-
                         try {
                             btn.setDisabled(true).setButtonText(t('Settings.Ai.TestLoading'));
-                            const report = await tester.runDeepDiagnostic((msg) => btn.setButtonText(msg));
-                            new DiagnosticModal(this.app, report).open();
+                            
+                            const tester = new ConnectivityTester(
+                                activeProfile.url || this.config.baseUrl || '',
+                                activeProfile.key,
+                                activeProfile.model || this.config.defaultModel,
+                                this.config.engine,
+                                this.settings.llmResponseFormat,
+                                this.settings.llmTimeout,
+                                this.settings.llmLanguage,
+                                this.settings.llmStyle
+                            );
+
+                            // 1. 立即开启诊断弹窗，显示等待状态
+                            const modal = new DiagnosticModal(this.app, tester.getInitialReport());
+                            modal.open();
+
+                            // 2. 启动深度测试，回调实时更新 Modal
+                            const report = await tester.runDeepDiagnostic((currentReport) => {
+                                modal.updateReport(currentReport);
+                            });
+
                             btn.setButtonText(report.overallStatus === 'healthy' ? t('Settings.Ai.TestSuccessBtn') : t('Settings.Ai.TestFail'));
                             setTimeout(() => btn.setButtonText(t('Settings.Ai.TestBtn')), 3000);
                         } catch (error: any) {
