@@ -4,7 +4,7 @@
   <p>
     <a href="https://github.com/eondrcode/obsidian-i18n/releases"><img src="https://img.shields.io/github/v/release/eondrcode/obsidian-i18n?style=flat-square&color=blue" alt="Release"></a>
     <a href="https://github.com/eondrcode/obsidian-i18n/blob/master/LICENSE"><img src="https://img.shields.io/github/license/eondrcode/obsidian-i18n?style=flat-square" alt="License"></a>
-    <a href="https://afdian.net/a/eondrcode"><img src="https://img.shields.io/badge/%E7%88%B1%E5%8F%91%E7%94%B5-%E8%B5%9E%E5%8A%A9%E4%BD%9C%E8%80%85-946ce6?style=flat-square" alt="Afdian"></a>
+    <a href="https://afdian.com/a/eondr"><img src="https://img.shields.io/badge/%E7%88%B1%E5%8F%91%E7%94%B5-%E8%B5%9E%E5%8A%A9%E4%BD%9C%E8%80%85-946ce6?style=flat-square" alt="Afdian"></a>
   </p>
 </div>
 
