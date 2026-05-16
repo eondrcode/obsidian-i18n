@@ -3,6 +3,7 @@
  * 
  * 目前使用硬编码配置
  */
+import Url from 'src/constants/url';
 import { WizardRemoteConfig } from '~/types';
 
 /**
@@ -19,14 +20,14 @@ export const WIZARD_CONFIG: WizardRemoteConfig = {
                     icon: 'PlaySquare',
                     titleKey: 'Wizard.VideoTitle',
                     descriptionKey: 'Wizard.VideoDesc',
-                    action: { type: 'url', value: 'https://www.bilibili.com/video/BV1VcxJeNExx/' },
+                    action: { type: 'url', value: Url.VIDEO_TUTORIAL },
                 },
                 {
                     type: 'card',
                     icon: 'BookOpen',
                     titleKey: 'Wizard.DocTitle',
                     descriptionKey: 'Wizard.DocDesc',
-                    action: { type: 'url', value: 'https://github.com/eondrcode/obsidian-i18n' },
+                    action: { type: 'url', value: Url.DOCUMENTATION_TUTORIAL },
                 },
             ],
         },
