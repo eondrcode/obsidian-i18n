@@ -444,3 +444,27 @@
 #immersive-translate-disc {
     display: none;
 }
+
+/* ============================================================
+   [修复] Tailwind preflight 污染 Obsidian 宿主的图片渲染
+   ------------------------------------------------------------
+   `@import "tailwindcss"` 会在 @layer base 内注入一条全局重置：
+
+       img, video { max-width: 100%; height: auto }
+
+   而 Obsidian 的笔记图片尺寸语法 ![[image.png|宽x高]] 是通过 HTML 的
+   width / height 属性（presentational attributes）实现的，其优先级低于
+   任何 author 样式表声明 —— 于是 height 被 auto 抹掉，表现为"只按宽度
+   缩放、高度按原图比例自适应"。影响所有启用本插件的用户，与翻译功能
+   无关，属于插件样式未做作用域隔离造成的全局污染（上游 issue #82）。
+
+   实测（Chrome）：revert 与 revert-layer 均无法回退到 presentational
+   attributes，只有 attr() 能读回属性值。本声明位于未分层区域，
+   优先级高于 @layer base 内的 preflight，故可覆盖之。
+   旧版 Obsidian（Chromium < 133）会直接忽略 attr() 声明，行为退回现状，
+   不会引入新问题。
+   ============================================================ */
+img[height],
+video[height] {
+    height: attr(height px);
+}

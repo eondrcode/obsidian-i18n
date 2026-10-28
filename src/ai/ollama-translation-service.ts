@@ -148,7 +148,14 @@ export class OllamaTranslationService extends BaseProvider {
     private static modelsCache: Record<string, { models: string[], timestamp: number }> = {};
 
     /**
-     * 从 Ollama 获取已安装的模型列表
+     * 探测本地运行时已安装的模型列表。
+     *
+     * 本通道同时服务于 Ollama 与 LM Studio，而两者协议不同：
+     *   - Ollama 原生:      GET {url}/api/tags
+     *   - OpenAI 兼容:      GET {url}/v1/models   ← Ollama(≥0.1.30) 与 LM Studio 均支持
+     *
+     * 原实现只打 /api/tags，导致指向 LM Studio（默认 http://127.0.0.1:1234）时
+     * 永远拉不到模型。现改为先试覆盖面更广的 OpenAI 兼容协议，再退回 Ollama 原生。
      */
     public static async fetchModels(baseUrl?: string): Promise<string[]> {
         const url = (baseUrl || OLLAMA_DEFAULT_URL).replace(/\/+$/, '');
@@ -160,6 +167,43 @@ export class OllamaTranslationService extends BaseProvider {
             return cached.models;
         }
 
+        const models =
+            (await this.fetchViaOpenAICompat(url)) ??
+            (await this.fetchViaOllamaTags(url)) ??
+            [];
+
+        if (models.length > 0) {
+            this.modelsCache[url] = { models, timestamp: now };
+        }
+        return models;
+    }
+
+    /** OpenAI 兼容协议：GET /v1/models（LM Studio 与新版 Ollama 通用）。返回 null 表示该协议不可用。 */
+    private static async fetchViaOpenAICompat(url: string): Promise<string[] | null> {
+        try {
+            const response = await requestUrl({
+                url: `${url}/v1/models`,
+                method: 'GET',
+                throw: false
+            });
+
+            if (response.status !== 200) return null;
+
+            const raw = response.json?.data;
+            if (!Array.isArray(raw)) return null;
+
+            const models = raw
+                .map((m: any) => (typeof m === 'string' ? m : m?.id))
+                .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
+
+            return models;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Ollama 原生协议：GET /api/tags。返回 null 表示该协议不可用。 */
+    private static async fetchViaOllamaTags(url: string): Promise<string[] | null> {
         try {
             const response = await requestUrl({
                 url: `${url}/api/tags`,
@@ -167,14 +211,14 @@ export class OllamaTranslationService extends BaseProvider {
                 throw: false
             });
 
-            if (response.status === 200 && response.json?.models) {
-                const models = response.json.models.map((m: any) => m.name || m.model);
-                this.modelsCache[url] = { models, timestamp: now };
-                return models;
+            if (response.status === 200 && Array.isArray(response.json?.models)) {
+                return response.json.models
+                    .map((m: any) => m.name || m.model)
+                    .filter(Boolean);
             }
-            return [];
+            return null;
         } catch {
-            return [];
+            return null;
         }
     }
 

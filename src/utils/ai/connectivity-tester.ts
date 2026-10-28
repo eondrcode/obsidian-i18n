@@ -39,20 +39,30 @@ export class ConnectivityTester {
     private model: string;
     private engine: 'openai' | 'gemini' | 'ollama';
     private responseFormat: string;
+    private reasoningEffort: string;
     private timeout: number;
     private language: string;
     private style: string;
     private logs: DiagnosticLog[] = [];
 
-    constructor(url: string, key: string, model: string, engine?: 'openai' | 'gemini' | 'ollama', responseFormat?: string, timeout?: number, language?: string, style?: string) {
+    constructor(url: string, key: string, model: string, engine?: 'openai' | 'gemini' | 'ollama', responseFormat?: string, timeout?: number, language?: string, style?: string, reasoningEffort?: string) {
         this.url = (url || '').trim();
         this.key = (key || '').trim();
         this.model = (model || '').trim();
         this.engine = engine || 'openai';
         this.responseFormat = responseFormat || 'text';
+        this.reasoningEffort = reasoningEffort || 'none';
         this.timeout = timeout || 60000;
         this.language = language || '简体中文';
         this.style = style || 'Technical';
+    }
+
+    /** 把推理强度合入请求体；'auto' 表示不干预服务商默认行为 */
+    private withReasoning(body: Record<string, any>): Record<string, any> {
+        if (this.reasoningEffort && this.reasoningEffort !== 'auto') {
+            body.reasoning_effort = this.reasoningEffort;
+        }
+        return body;
     }
 
     private addLog(stage: string, message: string, level: 'info' | 'warn' | 'error' = 'info', details?: string) {
@@ -310,12 +320,12 @@ export class ConnectivityTester {
         report.jsonMode.status = 'testing';
         onProgress?.(report);
         this.addLog('Capabilities', '探测原生 JSON_OBJECT 强制输出特性适配程度');
-        const jsonModeRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, {
+        const jsonModeRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, this.withReasoning({
             model: this.model,
             messages: [{ role: 'user', content: 'respond with json: {"ok":true}' }],
             response_format: { type: 'json_object' },
-            max_tokens: 10
-        });
+            max_tokens: 128
+        }));
         if (jsonModeRes.status === 200) {
             report.jsonMode.status = 'pass';
             report.jsonMode.value = '已支持';
@@ -332,7 +342,7 @@ export class ConnectivityTester {
         report.jsonSchema.status = 'testing';
         onProgress?.(report);
         this.addLog('Capabilities', '探测高级特性：结构化输出 (JSON Schema 严格遵循)');
-        const jsonSchemaRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, {
+        const jsonSchemaRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, this.withReasoning({
             model: this.model,
             messages: [{ role: 'user', content: 'respond with schema' }],
             response_format: {
@@ -343,18 +353,23 @@ export class ConnectivityTester {
                     strict: true
                 }
             },
-            max_tokens: 10
-        });
+            max_tokens: 128
+        }));
         if (jsonSchemaRes.status === 200) {
             report.jsonSchema.status = 'pass';
             report.jsonSchema.value = '已支持';
             this.addLog('Capabilities', '探测通过：基于 JSON Schema 的高度结构化约束功能完好');
+        } else if (this.responseFormat !== 'json_schema') {
+            // 模型没有该能力，但用户当前并未选用它 —— 纯信息提示，不构成问题
+            report.jsonSchema.status = 'na';
+            report.jsonSchema.value = '未使用';
+            report.jsonSchema.tip = `该模型不支持原生 JSON_SCHEMA（HTTP ${jsonSchemaRes.status}）。你当前的响应格式是 "${this.responseFormat}"，并不依赖这项能力，可以忽略本条。`;
+            this.addLog('Capabilities', `模型未实现 JSON Schema 严格约束；当前响应格式为 "${this.responseFormat}"，不受影响`, 'info');
         } else {
             report.jsonSchema.status = 'warn';
-            // 使用具体指导替换原先的提示词变量
-            report.jsonSchema.tip = '该模型不支持原生 JSON_SCHEMA。若实际翻译报错，建议将响应格式改回 Text';
+            report.jsonSchema.tip = '该模型不支持原生 JSON_SCHEMA，而你的响应格式正设为 json_schema，翻译请求会被直接拒绝。请改为 Text 或 JSON Object 后重试。';
             report.overallStatus = report.overallStatus === 'healthy' ? 'warning' : report.overallStatus;
-            this.addLog('Capabilities', `高级结构化输出功能遭拒或未实现，降级为常规生成 ${jsonSchemaRes.status}`, 'warn');
+            this.addLog('Capabilities', `高级结构化输出功能遭拒或未实现，状态码: ${jsonSchemaRes.status}`, 'warn');
         }
         onProgress?.(report);
 
@@ -374,11 +389,11 @@ export class ConnectivityTester {
                     role: 'user',
                     content: JSON.stringify([
                         { i: 1, s: "Settings for ${filename}" },
-                        { i: 2, s: "\\u2728 Shiny" }
+                        { i: 2, s: "✨ Shiny" }
                     ])
                 }
             ],
-            max_tokens: 150,
+            max_tokens: 1024,
             temperature: 0.3,
         };
 
@@ -412,6 +427,9 @@ export class ConnectivityTester {
         }
         // 'text' 模式不设置 response_format
 
+        // 注入推理强度：关闭后翻译不再被思维链抢占输出额度
+        this.withReasoning(translationBody);
+
         const transStartTime = Date.now();
         try {
             const transRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, translationBody);
@@ -435,9 +453,14 @@ export class ConnectivityTester {
                 this.addLog('Translation', `翻译模拟请求失败，状态码: ${transRes.status}`, 'error', transRes.text?.substring(0, 1000));
             } else {
                 let parseSuccess = false;
+                let emptyReason = '';
+                let reasoningTokens = 0;
                 try {
                     const body = typeof transRes.json === 'object' ? transRes.json : JSON.parse(transRes.text);
-                    const content = body?.choices?.[0]?.message?.content;
+                    const choice = body?.choices?.[0];
+                    const content = choice?.message?.content;
+                    const finish = choice?.finish_reason;
+                    reasoningTokens = body?.usage?.completion_tokens_details?.reasoning_tokens || 0;
                     if (content) {
                         let resultArray: any[] = [];
                         try {
@@ -466,6 +489,12 @@ export class ConnectivityTester {
                                 }
                             }
                         }
+                    } else if (finish === 'length' && reasoningTokens > 0) {
+                        emptyReason = `模型的思维链吃光了整份输出额度（推理占用 ${reasoningTokens} tokens，finish_reason=length），正式回答区 content 为空。这是"推理模型"的通病：翻译任务并不需要推理，开启它只会挤占输出空间。`;
+                    } else if (finish === 'length') {
+                        emptyReason = `输出被 max_tokens 截断（finish_reason=length），正式回答区为空。`;
+                    } else {
+                        emptyReason = `响应中没有 content 字段（finish_reason=${finish || '未知'}）。`;
                     }
                 } catch (e: any) {
                     this.addLog('Translation', `底层提取内容时发生解析错: ${e.message}`, 'error');
@@ -481,7 +510,19 @@ export class ConnectivityTester {
                         contentPreview = body?.choices?.[0]?.message?.content || '';
                     } catch { }
 
-                    report.translation.tip = `模型返回了无法被解析的内容。当前选择格式: "${this.responseFormat}"。\n模型实际输出预览: "${contentPreview.substring(0, 200)}..."\n建议: 若模型输出了大量非 JSON 文字，请确认其是否支持 JSON 模式，或改用 Text 格式。`;
+                    const lines = [`模型返回了无法被解析的内容。当前选择格式: "${this.responseFormat}"。`];
+                    if (emptyReason) lines.push(`原因: ${emptyReason}`);
+                    if (contentPreview) lines.push(`模型实际输出预览: "${contentPreview.substring(0, 200)}"`);
+
+                    if (reasoningTokens > 0) {
+                        lines.push(`建议: 该模型是推理模型。把「推理强度」设为"关闭推理"（或换成非推理模型）后重试，翻译不需要思维链。`);
+                    } else if (contentPreview) {
+                        lines.push(`建议: 模型输出了非 JSON 文字。可在「响应格式」中改用 JSON Object，或检查系统提示词是否被模型忽略。`);
+                    } else {
+                        lines.push(`建议: 响应体里没有正文。请检查服务商是否返回了内容审核拦截、或该模型的接口形态是否为标准 /chat/completions。`);
+                    }
+
+                    report.translation.tip = lines.join('\n');
                     report.translation.rawResponse = rawBody;
                     report.overallStatus = 'failed';
                     this.addLog('Translation', '模型生成的内容无法解析，请检查服务商返回的数据或响应格式是否正确。', 'error', rawBody);
@@ -517,7 +558,7 @@ export class ConnectivityTester {
         this.addLog('Fix', '探测单条翻译修复（Fix API）链路响应质量');
 
         const fixStartTime = Date.now();
-        const fixBody = {
+        const fixBody = this.withReasoning({
             model: this.model,
             messages: [
                 {
@@ -529,9 +570,9 @@ export class ConnectivityTester {
                     content: 'Source: "Save changes"; Broken: "保存 [错误]"; Error: "Bracket mismatch"'
                 }
             ],
-            max_tokens: 50,
+            max_tokens: 256,
             temperature: 0.3
-        };
+        });
 
         try {
             const fixRes = await this.safeRequest(`${testUrl}/chat/completions`, 'POST', true, fixBody);

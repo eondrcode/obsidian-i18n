@@ -174,7 +174,7 @@ export class DiagnosticModal extends Modal {
         else if (item.status === 'fail') statusLabel = (item.value || t('Settings.Ai.DiagStatusFail'));
         else if (item.status === 'warn') statusLabel = t('Settings.Ai.DiagStatusWarn');
         else if (item.status === 'testing') statusLabel = '正在检测...';
-        else statusLabel = '等待中';
+        else statusLabel = item.value || '等待中';
 
         if (item.usage && item.status === 'pass') {
             right.createSpan({

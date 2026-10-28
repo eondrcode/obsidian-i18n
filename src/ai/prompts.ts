@@ -100,6 +100,9 @@ Your task is to translate abstract syntax tree (AST) text nodes from a user inte
 # Translation & Safety Rules (CRITICAL)
 1. Absolute Code Protection
    - DO NOT translate any non-natural language syntax (e.g., \`{{count}}\`, \`<span/>\`, \`\\n\`).
+   - KEEP every \${...} placeholder EXACTLY as-is, character for character.
+     Never translate, rename, reorder, add or remove anything between \`\${ \` and \` }\`.
+     e.g. \`Auto \${s} interval (minutes)\` -> \`Auto \${s} 间隔（分钟）\`
 2. Context Awareness via y & n Fields
    - Use the \`y\` (node type) and \`n\` (node name) fields to infer context.
    - Example: \`y="Button"\`, \`n="submit"\` -> Translate as an action verb.

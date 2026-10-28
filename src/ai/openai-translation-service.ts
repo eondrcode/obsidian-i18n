@@ -140,6 +140,9 @@ export class OpenAITranslationService extends BaseProvider {
 
         let attempt = 0;
         let lastError: any = null;
+        // 部分服务商不认 reasoning_effort 参数，被拒一次后本次进程内不再发送
+        let reasoningRejected = false;
+        let requestParams: any = {};
 
         while (attempt <= maxRetries) {
             const timeoutController = new AbortController();
@@ -156,11 +159,17 @@ export class OpenAITranslationService extends BaseProvider {
             try {
                 if (signal?.aborted) throw new Error('翻译任务已取消');
 
-                const requestParams: any = {
+                requestParams = {
                     messages: messages as any,
                     model: this.getModelName(),
                     temperature: 0.3,
                 };
+
+                // 推理强度：翻译任务不需要思维链，默认关闭以节省 token 与耗时
+                const reasoningEffort = settings.llmReasoningEffort || 'none';
+                if (!reasoningRejected && reasoningEffort !== 'auto') {
+                    requestParams.reasoning_effort = reasoningEffort;
+                }
 
                 // 根据设定的格式注入对应 response_format
                 if (settings.llmResponseFormat === 'json_object') {
@@ -203,6 +212,17 @@ export class OpenAITranslationService extends BaseProvider {
 
                 if (isManualAbort) {
                     throw new Error('翻译任务已取消');
+                }
+
+                // 服务商拒绝 reasoning_effort（400/422 且提示参数不被支持）→ 去掉该参数重试一次
+                const errText = `${error?.message || ''} ${error?.error?.message || ''}`.toLowerCase();
+                const errStatus = error?.status ?? error?.statusCode;
+                if (!reasoningRejected && requestParams.reasoning_effort
+                    && (errStatus === 400 || errStatus === 422)
+                    && /reasoning_effort|unknown|unrecognized|unsupported|unexpected|extra|invalid[_ ]?param/.test(errText)) {
+                    reasoningRejected = true;
+                    console.warn('[OpenAI API] 服务商不接受 reasoning_effort 参数，已自动去除该参数重新请求。');
+                    continue;
                 }
 
                 lastError = isTimeout ? new Error(`请求超时 (${timeoutMs}ms)`) : error;
@@ -263,11 +283,16 @@ export class OpenAITranslationService extends BaseProvider {
             if (signal?.aborted) throw new Error('修复任务已取消');
 
             const openai = this.getOpenAIClient();
-            const completion = await openai.chat.completions.create({
+            const fixParams: any = {
                 messages: messages as any,
                 model: this.getModelName(),
                 temperature: 0.2,
-            }, { signal: timeoutController.signal });
+            };
+            const fixEffort = settings.llmReasoningEffort || 'none';
+            if (fixEffort !== 'auto') {
+                fixParams.reasoning_effort = fixEffort;
+            }
+            const completion = await openai.chat.completions.create(fixParams, { signal: timeoutController.signal });
 
             const result = completion.choices[0].message.content;
             if (!result || result.trim() === '') {

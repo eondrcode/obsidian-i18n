@@ -447,10 +447,44 @@ export class AstTranslator {
 
     private extractSource(node: t.StringLiteral | t.TemplateLiteral): string {
         if (t.isStringLiteral(node)) return node.value;
-        if (t.isTemplateLiteral(node) && node.quasis.length === 1) {
-            return node.quasis[0].value.raw;
+        if (t.isTemplateLiteral(node)) {
+            // 无插值的纯模板
+            if (node.quasis.length === 1) return node.quasis[0].value.raw;
+            // 含 ${} 插值的模板：把各插值表达式还原成源码文本，
+            // 例如 `Auto ${s} interval (minutes)`，作为可翻译的原文
+            let out = '';
+            node.quasis.forEach((quasi, i) => {
+                out += quasi.value.raw;
+                if (i < node.expressions.length) {
+                    out += '${' + generate(node.expressions[i] as t.Node, { minified: true }).code + '}';
+                }
+            });
+            // 只有整体像自然语言句子时才收，否则会连日志、错误消息、数据格式串一起捞进表格
+            return this.isTranslatableTemplate(out) ? out : '';
         }
         return "";
+    }
+
+    /**
+     * 判断含插值的模板是否值得翻译
+     * 去掉 ${...} 之后仍然是通顺的自然语言 → 视为界面文案；
+     * 否则视为日志、错误消息或数据格式串，丢弃。
+     */
+    private isTranslatableTemplate(text: string): boolean {
+        const stripped = text.replace(/\$\{[^}]*\}/g, ' ');
+        if (/[{}<>=;|&\\]|=>|\bthis\.|\bvar\b|\bfunction\b|0x|\/\//.test(stripped)) return false;
+        const words = stripped.trim().split(/\s+/).filter(Boolean);
+        if (words.length < 2) return false;
+        const natural = words.filter(w => /^[A-Za-z][a-z'-]*[.,:?!]?$/.test(w) || /^[A-Z]/.test(w)).length;
+        return natural / words.length > 0.6;
+    }
+
+    /** 取出模板字符串里各插值表达式的源码文本，用于替换前后的一致性校验 */
+    private templateExpressions(node: t.StringLiteral | t.TemplateLiteral): string[] {
+        if (!t.isTemplateLiteral(node)) return [];
+        return node.expressions.map(e =>
+            generate(e as t.Node, { minified: true }).code.replace(/\s+/g, '')
+        );
     }
 
     private replaceSource(node: t.StringLiteral | t.TemplateLiteral, target: string) {
@@ -466,6 +500,14 @@ export class AstTranslator {
             const safeTarget = target.replace(/`/g, '\\`');
             const ast = parseExpression('`' + safeTarget + '`');
             if (t.isTemplateLiteral(ast)) {
+                // 安全校验：译文里的插值表达式必须与原文逐一对应。
+                // 翻译时若改动、增删了 ${...}，直接放弃替换（保留英文），
+                // 避免生成引用不存在变量的代码。
+                const srcExpr = this.templateExpressions(node);
+                const tgtExpr = ast.expressions.map(e =>
+                    generate(e as t.Node, { minified: true }).code.replace(/\s+/g, '')
+                );
+                if (tgtExpr.length !== srcExpr.length || tgtExpr.some((e, i) => e !== srcExpr[i])) return;
                 Object.assign(node, { type: 'TemplateLiteral', quasis: ast.quasis, expressions: ast.expressions });
             }
         } catch (e) { /* ignore */ }

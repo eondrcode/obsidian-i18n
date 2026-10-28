@@ -6,6 +6,7 @@ import { DiagnosticModal } from "./diagnostic-modal";
 import { LLM_PROVIDERS, LLMProviderConfig } from "../../ai/constants";
 import { I18nSettings, LLMProfile } from "../data";
 import { OllamaTranslationService, OLLAMA_DEFAULT_URL } from "src/ai/ollama-translation-service";
+import { fetchOpenAICompatibleModels, clearModelCache } from "src/utils/ai/model-fetcher";
 
 export default class I18nLLMGeneric extends BaseSetting {
     private config: LLMProviderConfig;
@@ -188,23 +189,38 @@ export default class I18nLLMGeneric extends BaseSetting {
             .setName(t('Settings.Ai.ModelTitle'))
             .setDesc(providerId === 'ollama' ? t('Settings.Ai.OllamaModelDesc') : (t(`Settings.Ai.${labelKey}ModelDesc` as any) || t('Settings.Ai.ModelDesc')));
 
-        // Ollama 特有：刷新模型列表
-        if (providerId === 'ollama') {
+        // 刷新模型列表
+        // - 本地通道 (ollama / LM Studio)：走双协议探测
+        // - 云端 OpenAI 兼容通道：走 {baseUrl}/models 实时拉取
+        // Gemini 走自家 engine，其 OpenAI 兼容路径不提供 /models，故不显示该按钮。
+        const canRefreshModels = providerId === 'ollama' || this.config.engine === 'openai';
+        if (canRefreshModels) {
             modelSetting.addButton(btn => {
                 btn.setIcon('refresh-cw')
-                    .setTooltip(t('Settings.Ai.OllamaFetchModelsBtn'))
+                    .setTooltip(t('Settings.Ai.ModelFetchBtn'))
                     .onClick(async () => {
                         btn.setDisabled(true);
                         try {
-                            const fetchedModels = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
-                            if (fetchedModels.length === 0) {
-                                new Notice(t('Settings.Ai.OllamaNoModels'));
+                            clearModelCache();
+
+                            let fetchedModels: string[];
+                            if (providerId === 'ollama') {
+                                fetchedModels = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
                             } else {
-                                new Notice(t('Settings.Ai.OllamaModelsLoaded', { count: fetchedModels.length }));
+                                fetchedModels = await fetchOpenAICompatibleModels(
+                                    activeProfile.url || this.config.baseUrl,
+                                    activeProfile.key
+                                );
+                            }
+
+                            if (fetchedModels.length === 0) {
+                                new Notice(t('Settings.Ai.ModelFetchNoResult'));
+                            } else {
+                                new Notice(t('Settings.Ai.ModelFetchLoaded', { count: fetchedModels.length }));
                                 this.settingTab.llmDisplay();
                             }
                         } catch {
-                            new Notice(t('Settings.Ai.OllamaFetchFailed'));
+                            new Notice(t('Settings.Ai.ModelFetchFailed'));
                         } finally {
                             btn.setDisabled(false);
                         }
@@ -227,11 +243,18 @@ export default class I18nLLMGeneric extends BaseSetting {
         modelSetting.addDropdown(async dropdown => {
             dropdown.addOption('', t('Settings.Ai.ModelSelectPlaceholder'));
 
+            // 优先取服务商实时列表，拉不到再退回内置预设。
+            // 内置预设必然随服务商迭代而腐烂，只应作为兜底而非主数据源。
             let finalModels = models;
             if (providerId === 'ollama') {
-                try {
-                    finalModels = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
-                } catch { /* ignore */ }
+                const local = await OllamaTranslationService.fetchModels(activeProfile.url || OLLAMA_DEFAULT_URL);
+                if (local.length > 0) finalModels = local;
+            } else if (this.config.engine === 'openai') {
+                const live = await fetchOpenAICompatibleModels(
+                    activeProfile.url || this.config.baseUrl,
+                    activeProfile.key
+                );
+                if (live.length > 0) finalModels = live;
             }
 
             finalModels.forEach(m => dropdown.addOption(m, m));
@@ -265,6 +288,25 @@ export default class I18nLLMGeneric extends BaseSetting {
                     .setValue(this.settings.llmResponseFormat)
                     .onChange(async (value) => {
                         this.settings.llmResponseFormat = value;
+                        await this.i18n.saveSettings();
+                    });
+            });
+
+        // 推理强度：新版模型（deepseek-v4 系列等）默认会先吐一大段思维链，
+        // 翻译用不上，反而会挤占输出额度、拖慢速度、抬高账单。
+        new Setting(this.containerEl)
+            .setName(t('Settings.Ai.ReasoningEffortTitle'))
+            .setDesc(t('Settings.Ai.ReasoningEffortDesc'))
+            .addDropdown(dropdown => {
+                dropdown
+                    .addOption('none', t('Settings.Ai.ReasoningEffortNone'))
+                    .addOption('low', t('Settings.Ai.ReasoningEffortLow'))
+                    .addOption('medium', t('Settings.Ai.ReasoningEffortMedium'))
+                    .addOption('high', t('Settings.Ai.ReasoningEffortHigh'))
+                    .addOption('auto', t('Settings.Ai.ReasoningEffortAuto'))
+                    .setValue(this.settings.llmReasoningEffort || 'none')
+                    .onChange(async (value) => {
+                        this.settings.llmReasoningEffort = value;
                         await this.i18n.saveSettings();
                     });
             });
@@ -343,7 +385,8 @@ export default class I18nLLMGeneric extends BaseSetting {
                                 this.settings.llmResponseFormat,
                                 this.settings.llmTimeout,
                                 this.settings.llmLanguage,
-                                this.settings.llmStyle
+                                this.settings.llmStyle,
+                                this.settings.llmReasoningEffort
                             );
 
                             // 1. 立即开启诊断弹窗，显示等待状态

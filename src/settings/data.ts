@@ -45,7 +45,8 @@ export interface I18nSettings {
     // 语言模型翻译配置 (LLM)
     // ==============================
     llmApi: string;                 // 当前选中的 LLM 服务商 ('openai', 'gemini', 等)
-    llmResponseFormat: string;      // LLM 返回格式 (text, json_object)
+    llmResponseFormat: string;      // LLM 返回格式 (text, json_object, json_schema)
+    llmReasoningEffort: string;     // 推理强度 ('auto' | 'none' | 'low' | 'medium' | 'high')
     llmLanguage: string;            // LLM 翻译的目标语言
     llmStyle: string;               // LLM 翻译的风格类型
     llmBatchSize: number;           // LLM 批量翻译并行的文本条数
@@ -261,6 +262,11 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     llmApi: 'openai',               // 默认使用第一类 API 配置 (OpenAI)
     llmResponseFormat: 'text',      // 默认使用 text 的通用容错返回格式
+    // 默认关闭推理链。新版模型（deepseek-v4 系列、o 系列等）默认会先输出一大段
+    // 思维链，翻译任务并不需要它：实测 40 条批量，开启推理 9.1s / 2448 输出 token，
+    // 关闭后 1.8s / 452 token，译文质量一致。且低 max_tokens 时思维链会把额度耗尽，
+    // 导致 content 为空、解析失败。发送该参数若被服务商拒绝，插件会自动回退重试。
+    llmReasoningEffort: 'none',
     llmLanguage: '简体中文',        // LLM 的默认生成语言
     llmStyle: '无',                 // LLM 的默认生成风格
     llmBatchSize: 10,               // 默认最大批量并发为 10 条
@@ -293,13 +299,13 @@ export const DEFAULT_SETTINGS: I18nSettings = {
 
     // Gemini 专属配置
     llmGeminiKey: '',
-    llmGeminiModel: 'gemini-2.0-flash',
+    llmGeminiModel: LLM_PROVIDERS['gemini'].defaultModel,
     llmGeminiProfiles: [{
         id: 'default',
         name: 'Default',
         url: '',
         key: '',
-        model: 'gemini-2.0-flash',
+        model: LLM_PROVIDERS['gemini'].defaultModel,
         useCustomPrice: false,
         priceInput: 0,
         priceOutput: 0
@@ -563,7 +569,10 @@ export const DEFAULT_SETTINGS: I18nSettings = {
     // ==============================
     // 网络配置
     // ==============================
-    githubProxyUrl: 'https://ghp.ci/',
+    // 默认直连。原默认值 https://ghp.ci/ 的公共实例已停止服务（连接直接失败），
+    // 而直连 raw.githubusercontent.com 在多数网络下可用；需要加速时由用户在
+    // 「综合设置 → 加速节点」中自行切换。
+    githubProxyUrl: '',
 
     cloudRepos: [],
     defaultCloudRepo: '',

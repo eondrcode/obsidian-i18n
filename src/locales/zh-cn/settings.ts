@@ -187,17 +187,30 @@ export default {
         OpenaiUrlDesc: "API 基础路径，如 https://api.openai.com",
         OpenaiUrlPlaceholder: "https://api.openai.com",
         OpenaiKeyTitle: "API 密钥",
-        OpenaiKeyDescTip: "密钥加密存储在本地，不会上传。",
+        OpenaiKeyDescTip: "密钥以明文保存在本插件的数据文件中，未经加密。请勿将笔记库提交到公开仓库或同步至不受信任的云端。",
         OpenaiKeyPlaceholder: "sk-...",
         ResponseFormatTitle: "响应格式",
         ResponseFormatDesc: "LLM 返回数据的解析方式。",
         ResponseFormatText: "Text (通用)",
         ResponseFormatJsonObject: "JSON Object",
         ResponseFormatJsonSchema: "JSON Schema",
+        // ── 推理强度 ──
+        ReasoningEffortTitle: "推理强度",
+        ReasoningEffortDesc: "新版模型（deepseek-v4 系列、o 系列等）默认会先输出一大段思维链再作答。翻译任务用不上推理，开着只会挤占输出额度、拖慢速度、抬高账单——实测同样 40 条批量，关闭推理后耗时从 9.1s 降到 1.8s、输出 token 减半，译文质量一致。若服务商不接受该参数，插件会自动去掉后重试。",
+        ReasoningEffortNone: "关闭推理 (推荐)",
+        ReasoningEffortLow: "低",
+        ReasoningEffortMedium: "中",
+        ReasoningEffortHigh: "高",
+        ReasoningEffortAuto: "不干预 (交给服务商默认)",
         ModelTitle: "模型",
         ModelDesc: "用于翻译的模型名称。",
         ModelSelectPlaceholder: "选择内置模型",
         ModelInputPlaceholder: "或手动输入",
+        // ── 模型列表拉取 ──
+        ModelFetchBtn: "刷新模型列表",
+        ModelFetchLoaded: "已从服务商拉取到 {{count}} 个模型",
+        ModelFetchNoResult: "未能拉取到模型列表，已保留内置预设。请检查接口地址、密钥与网络。",
+        ModelFetchFailed: "拉取模型列表失败，请检查接口地址与密钥。",
         // ── 连通测试 ──
         TestHeader: "连通测试",
         TestTitle: "测试连接",
@@ -272,17 +285,17 @@ export default {
         PriceOutputDesc: "每百万输出 Token 的人民币价格，支持 4 位小数。",
         // ── Gemini 专属 ──
         GeminiKeyTitle: "Gemini API 密钥",
-        GeminiKeyDesc: "Google AI Studio 的 API Key，密钥加密存储在本地。",
+        GeminiKeyDesc: "Google AI Studio 的 API Key，以明文保存在本插件数据文件中。",
         GeminiKeyMissing: "请先配置 Gemini API Key",
-        // ── Ollama 专属 ──
-        OllamaUrlTitle: "Ollama 端点地址",
-        OllamaUrlDesc: "本地 Ollama 服务的 HTTP 地址，默认为 http://localhost:11434。",
-        OllamaModelDesc: "选择或输入已安装的 Ollama 模型名称。",
-        OllamaModelPlaceholder: "例: qwen2.5 或 llama3",
+        // ── 本地运行时 (Ollama / LM Studio) ──
+        OllamaUrlTitle: "本地服务地址",
+        OllamaUrlDesc: "本地推理服务的 HTTP 地址。Ollama 默认 http://localhost:11434，LM Studio 默认 http://127.0.0.1:1234。",
+        OllamaModelDesc: "选择或输入本地已加载的模型名称。请先启动本地服务并加载模型。",
+        OllamaModelPlaceholder: "例: qwen2.5 / qwen/qwen3.5-9b",
         OllamaFetchModelsBtn: "刷新模型列表",
-        OllamaNoModels: "未检测到已安装模型，请先通过 Ollama 下载模型。",
+        OllamaNoModels: "未检测到已安装模型，请先启动本地服务并下载模型。",
         OllamaModelsLoaded: "已加载 {{count}} 个模型",
-        OllamaFetchFailed: "无法连接 Ollama 服务，请检查是否已启动。",
+        OllamaFetchFailed: "无法连接本地服务，请检查地址是否正确、服务是否已启动。",
         OllamaConnectFail: "无法连接 Ollama",
         OllamaModelNotFound: "模型 {{model}} 未找到，请先执行 ollama pull {{model}}",
         // ── DeepSeek 专属 ──
@@ -308,22 +321,22 @@ export default {
         GroqModelDesc: "选择或输入 Groq 支持的模型 (如 Llama 3)。",
         // ── SiliconFlow 专属 ──
         SiliconflowKeyTitle: "SiliconFlow (硅基流动) 密钥",
-        SiliconflowModelDesc: "选择或输入 SiliconFlow 支持的模型 (如 DeepSeek-V3)。",
+        SiliconflowModelDesc: "选择或输入 SiliconFlow 支持的模型 (如 Qwen/Qwen3.5-9B)。",
         // ── OpenRouter 专属 ──
         OpenrouterKeyTitle: "OpenRouter API 密钥",
-        OpenrouterModelDesc: "输入 OpenRouter 模型标识符 (如 anthropic/claude-3.5-sonnet)。",
+        OpenrouterModelDesc: "输入 OpenRouter 模型标识符 (如 deepseek/deepseek-v4.1-flash)。",
         // ── DeepInfra 专属 ──
         DeepinfraKeyTitle: "DeepInfra API 密钥",
-        DeepinfraModelDesc: "选择或输入 DeepInfra 支持的模型 (如 Llama-3.3)。",
+        DeepinfraModelDesc: "选择或输入 DeepInfra 支持的模型 (如 deepseek-ai/DeepSeek-V4-Flash)。",
         // ── Mistral 专属 ──
         MistralKeyTitle: "Mistral AI API 密钥",
         MistralModelDesc: "选择或输入 Mistral 官方模型 (如 mistral-large-latest)。",
         // ── MiniMax 专属 ──
         MinimaxKeyTitle: "MiniMax (海螺 AI) 密钥",
-        MinimaxModelDesc: "选择或输入 MiniMax 模型 (如 abab6.5-chat)。",
+        MinimaxModelDesc: "选择或输入 MiniMax 模型 (如 MiniMax-M2.5)。",
         // ── StepFun 专属 ──
         StepfunKeyTitle: "阶跃星辰 (StepFun) 密钥",
-        StepfunModelDesc: "选择或输入阶跃星辰模型 (如 step-1-8k)。",
+        StepfunModelDesc: "选择或输入阶跃星辰模型 (如 step-2-mini)。",
     },
     Share: {
         AuthTitle: "远程仓库",
