@@ -58,7 +58,7 @@ export class ReactView {
 
     /** 初始化基础样式 */
     private initStyles = () => {
-        this.containerEl.classList.add('react-view__container');        // 设置容器元素样式
+        this.containerEl.classList.add('i18n-ui', 'react-view__container');        // 设置容器元素样式
         this.contentEl.classList.add('react-view__content');            // 设置内容元素样式
         this.maskEl.classList.add('react-view__mask');                  // 设置遮罩元素样式
         // 添加自定义类名
@@ -283,12 +283,13 @@ export function mountReactView(
 
     // ============================================================
     // 暗色模式同步：检测 Obsidian 的 body.theme-dark 并同步 .dark 类
-    // 到 Shadow DOM 内部的挂载点，使 CSS 变量（.dark { ... }）和
+    // 到宿主和 Shadow DOM 内部挂载点，使根样式、CSS 变量和
     // Tailwind dark variant（@custom-variant dark (&:is(.dark *))）
     // 在 Shadow DOM 内正确生效。
     // ============================================================
     const syncDarkMode = () => {
         const isDark = document.body.classList.contains('theme-dark');
+        contentEl.classList.toggle('i18n-ui-dark', isDark);
         mountPoint.classList.toggle('dark', isDark);
     };
 

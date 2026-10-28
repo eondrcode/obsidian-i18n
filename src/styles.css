@@ -1,15 +1,23 @@
-.debug-border {
-    border: 1px solid red;
-}
-
 /* shadcn
 ----------------------------------------------------------------*/
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme) theme(reference);
 @import "tw-animate-css";
+
+/* 同一份样式会被宿主和 Shadow DOM 加载，重置与工具类仅在插件界面内生效。 */
+:where(:host, .i18n-ui) {
+    @import "tailwindcss/preflight.css" layer(base);
+    @import "tailwindcss/utilities.css" layer(utilities);
+
+    .debug-border {
+        border: 1px solid red;
+    }
+}
 
 @custom-variant dark (&:is(.dark *, .theme-dark *));
 
-:root {
+:host,
+.i18n-ui {
     --background: oklch(1.0000 0 0);
     --foreground: oklch(0.1448 0 0);
     --card: oklch(1.0000 0 0);
@@ -64,8 +72,10 @@
     --spacing: 0.25rem;
 }
 
-.dark,
-.theme-dark {
+:host(.i18n-ui-dark),
+:host .dark,
+.i18n-ui.dark,
+.theme-dark .i18n-ui {
     --background: oklch(0.1448 0 0);
     --foreground: oklch(0.9851 0 0);
     --card: oklch(0.2134 0 0);
@@ -118,7 +128,7 @@
     --shadow-2xl: 0px 1px 0px 0px hsl(0 0% 0% / 0.00);
 }
 
-@theme inline {
+@theme inline reference {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
     --color-card: var(--card);
@@ -172,12 +182,16 @@
 }
 
 @layer base {
-    * {
+    :where(:host, .i18n-ui) * {
         @apply border-border outline-ring/50;
     }
 
-    body {
+    :host,
+    .i18n-ui {
         @apply bg-background text-foreground;
+        font-family: var(--font-sans);
+        line-height: 1.5;
+        tab-size: 4;
     }
 }
 
@@ -188,7 +202,7 @@
     height: 100%;
 }
 
-.mount-point {
+:where(:host, .i18n-ui) .mount-point {
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -197,174 +211,176 @@
 
 /* 自定义 Markdown 渲染样式 (用于 react-markdown 替代 @tailwindcss/typography)
 ----------------------------------------------------------------*/
-.markdown-container {
-    color: var(--foreground);
-    line-height: 1.6;
-    font-size: 14px;
-    word-wrap: break-word;
-}
+:where(:host, .i18n-ui) {
+    .markdown-container {
+        color: var(--foreground);
+        line-height: 1.6;
+        font-size: 14px;
+        word-wrap: break-word;
+    }
 
-.markdown-container>*:first-child {
-    margin-top: 0 !important;
-}
+    .markdown-container>*:first-child {
+        margin-top: 0 !important;
+    }
 
-.markdown-container h1,
-.markdown-container h2,
-.markdown-container h3,
-.markdown-container h4,
-.markdown-container h5,
-.markdown-container h6 {
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-    font-weight: 600;
-    line-height: 1.25;
-    color: var(--foreground);
-}
+    .markdown-container h1,
+    .markdown-container h2,
+    .markdown-container h3,
+    .markdown-container h4,
+    .markdown-container h5,
+    .markdown-container h6 {
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+        line-height: 1.25;
+        color: var(--foreground);
+    }
 
-.markdown-container h1 {
-    font-size: 2em;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.3em;
-}
+    .markdown-container h1 {
+        font-size: 2em;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.3em;
+    }
 
-.markdown-container h2 {
-    font-size: 1.5em;
-    border-bottom: 1px solid var(--border);
-    padding-bottom: 0.3em;
-}
+    .markdown-container h2 {
+        font-size: 1.5em;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.3em;
+    }
 
-.markdown-container h3 {
-    font-size: 1.25em;
-}
+    .markdown-container h3 {
+        font-size: 1.25em;
+    }
 
-.markdown-container h4 {
-    font-size: 1em;
-}
+    .markdown-container h4 {
+        font-size: 1em;
+    }
 
-.markdown-container h5 {
-    font-size: 0.875em;
-}
+    .markdown-container h5 {
+        font-size: 0.875em;
+    }
 
-.markdown-container h6 {
-    font-size: 0.85em;
-    color: var(--muted-foreground);
-}
+    .markdown-container h6 {
+        font-size: 0.85em;
+        color: var(--muted-foreground);
+    }
 
-.markdown-container p,
-.markdown-container blockquote,
-.markdown-container ul,
-.markdown-container ol,
-.markdown-container dl,
-.markdown-container table,
-.markdown-container pre,
-.markdown-container details {
-    margin-top: 0;
-    margin-bottom: 16px;
-}
+    .markdown-container p,
+    .markdown-container blockquote,
+    .markdown-container ul,
+    .markdown-container ol,
+    .markdown-container dl,
+    .markdown-container table,
+    .markdown-container pre,
+    .markdown-container details {
+        margin-top: 0;
+        margin-bottom: 16px;
+    }
 
-.markdown-container a {
-    color: var(--primary);
-    text-decoration: none;
-}
+    .markdown-container a {
+        color: var(--primary);
+        text-decoration: none;
+    }
 
-.markdown-container a:hover {
-    text-decoration: underline;
-}
+    .markdown-container a:hover {
+        text-decoration: underline;
+    }
 
-.markdown-container strong {
-    font-weight: 600;
-}
+    .markdown-container strong {
+        font-weight: 600;
+    }
 
-.markdown-container ul,
-.markdown-container ol {
-    padding-left: 2em;
-}
+    .markdown-container ul,
+    .markdown-container ol {
+        padding-left: 2em;
+    }
 
-.markdown-container ul li {
-    list-style-type: disc;
-}
+    .markdown-container ul li {
+        list-style-type: disc;
+    }
 
-.markdown-container ol li {
-    list-style-type: decimal;
-}
+    .markdown-container ol li {
+        list-style-type: decimal;
+    }
 
-.markdown-container blockquote {
-    padding: 0 1em;
-    color: var(--muted-foreground);
-    border-left: 0.25em solid var(--border);
-}
+    .markdown-container blockquote {
+        padding: 0 1em;
+        color: var(--muted-foreground);
+        border-left: 0.25em solid var(--border);
+    }
 
-.markdown-container code {
-    padding: 0.2em 0.4em;
-    margin: 0;
-    font-size: 85%;
-    white-space: break-spaces;
-    background-color: var(--muted);
-    border-radius: 6px;
-    font-family: var(--font-mono);
-}
+    .markdown-container code {
+        padding: 0.2em 0.4em;
+        margin: 0;
+        font-size: 85%;
+        white-space: break-spaces;
+        background-color: var(--muted);
+        border-radius: 6px;
+        font-family: var(--font-mono);
+    }
 
-.markdown-container pre {
-    padding: 16px;
-    overflow: auto;
-    font-size: 85%;
-    line-height: 1.45;
-    background-color: var(--muted);
-    border-radius: 6px;
-}
+    .markdown-container pre {
+        padding: 16px;
+        overflow: auto;
+        font-size: 85%;
+        line-height: 1.45;
+        background-color: var(--muted);
+        border-radius: 6px;
+    }
 
-.markdown-container pre code {
-    display: inline;
-    max-width: auto;
-    padding: 0;
-    margin: 0;
-    overflow: visible;
-    line-height: inherit;
-    word-wrap: normal;
-    background-color: transparent;
-    border: 0;
-}
+    .markdown-container pre code {
+        display: inline;
+        max-width: auto;
+        padding: 0;
+        margin: 0;
+        overflow: visible;
+        line-height: inherit;
+        word-wrap: normal;
+        background-color: transparent;
+        border: 0;
+    }
 
-.markdown-container table {
-    border-spacing: 0;
-    border-collapse: collapse;
-    display: block;
-    width: 100%;
-    overflow: auto;
-}
+    .markdown-container table {
+        border-spacing: 0;
+        border-collapse: collapse;
+        display: block;
+        width: 100%;
+        overflow: auto;
+    }
 
-.markdown-container table th,
-.markdown-container table td {
-    padding: 6px 13px;
-    border: 1px solid var(--border);
-}
+    .markdown-container table th,
+    .markdown-container table td {
+        padding: 6px 13px;
+        border: 1px solid var(--border);
+    }
 
-.markdown-container table tr {
-    background-color: var(--background);
-    border-top: 1px solid var(--border);
-}
+    .markdown-container table tr {
+        background-color: var(--background);
+        border-top: 1px solid var(--border);
+    }
 
-.markdown-container table tr:nth-child(2n) {
-    background-color: var(--muted);
-}
+    .markdown-container table tr:nth-child(2n) {
+        background-color: var(--muted);
+    }
 
-.markdown-container img {
-    max-width: 100%;
-    box-sizing: content-box;
-    background-color: var(--background);
-}
+    .markdown-container img {
+        max-width: 100%;
+        box-sizing: content-box;
+        background-color: var(--background);
+    }
 
-.markdown-container hr {
-    height: 0.25em;
-    padding: 0;
-    margin: 24px 0;
-    background-color: var(--border);
-    border: 0;
+    .markdown-container hr {
+        height: 0.25em;
+        padding: 0;
+        margin: 24px 0;
+        background-color: var(--border);
+        border: 0;
+    }
 }
 
 /* .react-view(视图) 视图
 ----------------------------------------------------------------*/
-.react-view__container {
+.i18n-ui.react-view__container {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -376,7 +392,7 @@
     z-index: 1000;
 }
 
-.react-view__content {
+.i18n-ui .react-view__content {
     --checkbox-size: var(--font-ui-medium);
     background-color: var(--modal-background);
     border-radius: var(--modal-radius);
@@ -392,7 +408,7 @@
     border-radius: 6px;
 }
 
-.react-view__mask {
+.i18n-ui .react-view__mask {
     position: absolute;
     top: 0;
     inset-inline-start: 0;
@@ -400,6 +416,11 @@
     height: 100%;
     background-color: var(--background-modifier-cover);
     z-index: -1
+}
+
+/* 设置页根节点本身不属于作用域后代，直接保留其布局。 */
+.i18n-settings-wrapper {
+    @apply flex flex-col w-full h-full pb-4;
 }
 
 /* 沉浸式翻译
@@ -443,28 +464,4 @@
 
 #immersive-translate-disc {
     display: none;
-}
-
-/* ============================================================
-   [修复] Tailwind preflight 污染 Obsidian 宿主的图片渲染
-   ------------------------------------------------------------
-   `@import "tailwindcss"` 会在 @layer base 内注入一条全局重置：
-
-       img, video { max-width: 100%; height: auto }
-
-   而 Obsidian 的笔记图片尺寸语法 ![[image.png|宽x高]] 是通过 HTML 的
-   width / height 属性（presentational attributes）实现的，其优先级低于
-   任何 author 样式表声明 —— 于是 height 被 auto 抹掉，表现为"只按宽度
-   缩放、高度按原图比例自适应"。影响所有启用本插件的用户，与翻译功能
-   无关，属于插件样式未做作用域隔离造成的全局污染（上游 issue #82）。
-
-   实测（Chrome）：revert 与 revert-layer 均无法回退到 presentational
-   attributes，只有 attr() 能读回属性值。本声明位于未分层区域，
-   优先级高于 @layer base 内的 preflight，故可覆盖之。
-   旧版 Obsidian（Chromium < 133）会直接忽略 attr() 声明，行为退回现状，
-   不会引入新问题。
-   ============================================================ */
-img[height],
-video[height] {
-    height: attr(height px);
 }

@@ -28,6 +28,7 @@ import { WizardView, WIZARD_VIEW_TYPE } from './views/wizard';
 import * as React from 'react';
 import * as ReactDOM from 'react-dom/client';
 import { DevDebugCard } from './views/manager/dev-debug-card';
+import { createI18nPortalContainer } from './shadcn/lib/portal';
 
 // ==============================
 //          [入口] I18n
@@ -72,6 +73,9 @@ export default class I18N extends Plugin {
         icons();                        // [加载] 图标类
         commands(this.app, this);       // [加载] 指令类
         await this.loadSettings();      // [加载] 配置类
+
+        const portalContainer = createI18nPortalContainer();
+        this.register(() => portalContainer.remove());
 
         if (process.env.DEV_MODE) {
             this.initDevDebug();
@@ -276,7 +280,7 @@ export default class I18N extends Plugin {
 
     private initDevDebug() {
         if (!process.env.DEV_MODE) return;
-        const container = document.body.createDiv({ cls: 'i18n-dev-debug-container' });
+        const container = document.body.createDiv({ cls: 'i18n-dev-debug-container i18n-ui' });
         this.devRoot = ReactDOM.createRoot(container);
         this.devRoot.render(React.createElement(DevDebugCard, { i18n: this }));
     }

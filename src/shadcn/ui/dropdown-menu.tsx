@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/src/shadcn/lib/utils"
+import { getI18nPortalContainer } from "@/src/shadcn/lib/portal"
 
 function DropdownMenu({
     ...props
@@ -11,10 +12,11 @@ function DropdownMenu({
 }
 
 function DropdownMenuPortal({
+    container = getI18nPortalContainer(),
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
     return (
-        <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
+        <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" container={container} {...props} />
     )
 }
 
@@ -35,7 +37,7 @@ function DropdownMenuContent({
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
     return (
-        <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPortal>
             <DropdownMenuPrimitive.Content
                 data-slot="dropdown-menu-content"
                 sideOffset={sideOffset}
@@ -45,7 +47,7 @@ function DropdownMenuContent({
                 )}
                 {...props}
             />
-        </DropdownMenuPrimitive.Portal>
+        </DropdownMenuPortal>
     )
 }
 

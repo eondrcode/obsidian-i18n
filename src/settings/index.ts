@@ -49,7 +49,7 @@ class I18nSettingTab extends PluginSettingTab {
         (containerEl as any)._darkObserver = observer;
 
         // 基础布局：全屏、垂直伸缩
-        containerEl.addClass('i18n-settings-wrapper', 'flex', 'flex-col', 'w-full', 'h-full', 'pb-4');
+        containerEl.addClass('i18n-ui', 'i18n-settings-wrapper');
 
         // 注入响应式样式，防止文字竖排，空间过小时仅保留图标
         const styleEl = containerEl.createEl('style');
