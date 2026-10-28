@@ -119,15 +119,11 @@ export class StateManager {
                 // If stored version is different from manifest version AND state says it's applied
                 if (state.pluginVersion !== manifest.version) {
                     if (state.isApplied) {
-                        state.isApplied = false;
-                        state.pluginVersion = manifest.version;
-                        hasChanges = true;
-                    } else {
-                        // Even if not applied, update version to match current? 
-                        // Maybe not strictly necessary strictly, but good for keeping track.
-                        state.pluginVersion = manifest.version;
-                        hasChanges = true;
+                        await this.plugin.backupManager.preserveLegacyVersion(manifest.id, state.pluginVersion);
                     }
+                    state.isApplied = false;
+                    state.pluginVersion = manifest.version;
+                    hasChanges = true;
                 }
             }
         }
@@ -157,6 +153,9 @@ export class StateManager {
                         const state = this.getThemeState(themeId);
                         if (state) {
                             if (state.pluginVersion !== currentVersion) {
+                                if (state.isApplied) {
+                                    await this.plugin.backupManager.preserveLegacyVersion(themeId, state.pluginVersion);
+                                }
                                 state.isApplied = false;
                                 state.pluginVersion = currentVersion;
                                 hasChanges = true;

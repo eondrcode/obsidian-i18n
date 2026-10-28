@@ -3,6 +3,7 @@ import { Notice } from 'obsidian';
 import I18N from 'src/main';
 import * as path from 'path';
 import { AstInspector } from '../../utils/ui/ast-inspector';
+import { t } from '../../locales';
 
 interface DevDebugCardProps {
     i18n: I18N;
@@ -122,24 +123,37 @@ export const DevDebugCard: React.FC<DevDebugCardProps> = ({ i18n }) => {
                     // @ts-ignore
                     const pluginDir = path.join(path.normalize(i18n.app.vault.adapter.getBasePath()), plugin.dir ?? '');
 
-                    const success = await i18n.backupManager.restoreBackup(state.id, pluginDir);
-                    if (success) {
-                        i18n.stateManager.setPluginState(state.id, { ...state, isApplied: false });
+                    await i18n.backupManager.withBackupSession(state.id, async backup => {
+                        const currentState = i18n.stateManager.getPluginState(state.id);
+                        if (!currentState?.isApplied) return;
                         // @ts-ignore
-                        if (i18n.app.plugins.enabledPlugins.has(state.id)) {
-                            // @ts-ignore
-                            await i18n.app.plugins.disablePlugin(state.id);
-                            // @ts-ignore
-                            await i18n.app.plugins.enablePlugin(state.id);
+                        const wasEnabled = i18n.app.plugins.enabledPlugins.has(state.id);
+                        const restored = await backup.restoreBackup(pluginDir);
+                        if (!restored) return;
+                        i18n.stateManager.setPluginState(state.id, { ...currentState, isApplied: false });
+                        if (wasEnabled) {
+                            try {
+                                // @ts-ignore
+                                await i18n.app.plugins.disablePlugin(state.id);
+                                // @ts-ignore
+                                await i18n.app.plugins.enablePlugin(state.id);
+                                // @ts-ignore
+                                if (!i18n.app.plugins.enabledPlugins.has(state.id)) {
+                                    throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                                }
+                            } catch (reloadError) {
+                                console.error(`[i18n] Failed to reload restored plugin ${state.id}:`, reloadError);
+                                throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                            }
                         }
                         count++;
-                    }
+                    });
                 }
             }
             new Notice(`已成功还原 ${count} 个插件`);
         } catch (e) {
             console.error(e);
-            new Notice('还原失败，请检查控制台');
+            new Notice(e instanceof Error ? e.message : '还原失败，请检查控制台');
         } finally {
             setIsActionRunning(false);
         }

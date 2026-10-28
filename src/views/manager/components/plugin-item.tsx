@@ -178,105 +178,125 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
         }
         setReplacing(true);
         try {
-            const translationJson: PluginTranslationV1 = loadTranslationFile(langDoc);
-            if (translationJson.dict) {
-                const files = Object.keys(translationJson.dict);
-                await i18n.backupManager.createBackup(plugin.id, pluginDir, files);
+            await i18n.backupManager.withBackupSession(plugin.id, async backup => {
+                const translationJson: PluginTranslationV1 = loadTranslationFile(langDoc);
+                if (translationJson.dict) {
+                    const files = Object.keys(translationJson.dict);
+                    const backedUp = await backup.createBackup(pluginDir, files);
+                    if (!backedUp) {
+                        throw new Error(t('Manager.Common.Errors.BackupFailed'));
+                    }
 
-                const newContents: Record<string, string> = {};
+                    const newContents: Record<string, string> = {};
 
-                for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
-                    const targetFilePath = path.join(pluginDir, file);
-                    if (!fs.existsSync(targetFilePath)) continue;
+                    for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
+                        const targetFilePath = path.join(pluginDir, file);
+                        if (!fs.existsSync(targetFilePath)) continue;
 
-                    let fileString = fs.readFileSync(targetFilePath).toString();
-
-                    if (dict.ast && dict.ast.length > 0) {
-                        const astTranslator = new AstTranslator(i18n.settings);
-                        const ast = astTranslator.loadCode(fileString);
-                        if (ast) {
-                            fileString = astTranslator.translate(ast, dict.ast);
+                        let fileString = await backup.getBackupContent(file, pluginDir);
+                        if (fileString === null) {
+                            throw new Error(t('Manager.Common.Errors.BackupFailed'));
                         }
-                    }
 
-                    if (dict.regex && dict.regex.length > 0) {
-                        const regexTranslator = new RegexTranslator(i18n.settings);
-                        fileString = regexTranslator.translate(fileString, dict.regex);
-                    }
-
-                    if (targetFilePath.endsWith('.js')) {
-                        const checkTranslator = new AstTranslator(i18n.settings);
-                        if (!checkTranslator.loadCode(fileString)) {
-                            throw new Error(t('Manager.Plugins.Errors.SyntaxError', { file }));
+                        if (dict.ast && dict.ast.length > 0) {
+                            const astTranslator = new AstTranslator(i18n.settings);
+                            const ast = astTranslator.loadCode(fileString);
+                            if (ast) {
+                                fileString = astTranslator.translate(ast, dict.ast);
+                            }
                         }
+
+                        if (dict.regex && dict.regex.length > 0) {
+                            const regexTranslator = new RegexTranslator(i18n.settings);
+                            fileString = regexTranslator.translate(fileString, dict.regex);
+                        }
+
+                        if (targetFilePath.endsWith('.js')) {
+                            const checkTranslator = new AstTranslator(i18n.settings);
+                            if (!checkTranslator.loadCode(fileString)) {
+                                throw new Error(t('Manager.Plugins.Errors.SyntaxError', { file }));
+                            }
+                        }
+
+                        newContents[targetFilePath] = fileString;
                     }
 
-                    newContents[targetFilePath] = fileString;
+                    for (const [targetFilePath, content] of Object.entries(newContents)) {
+                        fs.writeFileSync(targetFilePath, content);
+                    }
                 }
-
-                for (const [targetFilePath, content] of Object.entries(newContents)) {
-                    fs.writeFileSync(targetFilePath, content);
-                }
-            }
-            i18n.stateManager.setPluginState(plugin.id, {
-                id: plugin.id,
-                isApplied: true,
-                pluginVersion: plugin.version,
-                translationVersion: translationJson.metadata.version
-            });
-            const previousEnabledState = isEnabled;
-            let loadFailed = false;
-
-            try {
+                i18n.stateManager.setPluginState(plugin.id, {
+                    id: plugin.id,
+                    isApplied: true,
+                    pluginVersion: plugin.version,
+                    translationVersion: translationJson.metadata.version
+                });
                 // @ts-ignore
-                if (i18n.app.plugins.enabledPlugins.has(plugin.id)) {
+                const previousEnabledState = i18n.app.plugins.enabledPlugins.has(plugin.id);
+                let loadFailed = false;
+
+                try {
                     // @ts-ignore
-                    await i18n.app.plugins.disablePlugin(plugin.id);
-                }
-                // @ts-ignore
-                await i18n.app.plugins.enablePlugin(plugin.id);
-
-                // @ts-ignore
-                if (!i18n.app.plugins.plugins[plugin.id]) {
-                    loadFailed = true;
-                }
-            } catch (error) {
-                console.warn("[i18n 安全防护] 插件试运行失败:", error);
-                loadFailed = true;
-            }
-
-            if (loadFailed) {
-                i18n.notice.error(t('Manager.Plugins.Errors.LoadFailedAfterApply') || '译文导致核心逻辑损坏，已触发安全拦截并自动回滚。');
-
-                // 开始强效回滚到未翻译初始状态
-                await i18n.backupManager.restoreBackup(plugin.id, pluginDir);
-                i18n.stateManager.deletePluginState(plugin.id);
-
-                // 恢复它原本的状态
-                if (previousEnabledState) {
+                    if (i18n.app.plugins.enabledPlugins.has(plugin.id)) {
+                        // @ts-ignore
+                        await i18n.app.plugins.disablePlugin(plugin.id);
+                    }
                     // @ts-ignore
                     await i18n.app.plugins.enablePlugin(plugin.id);
-                } else {
+
                     // @ts-ignore
-                    await i18n.app.plugins.disablePlugin(plugin.id);
+                    if (!i18n.app.plugins.plugins[plugin.id]) {
+                        loadFailed = true;
+                    }
+                } catch (error) {
+                    console.warn('[i18n 安全防护] 插件试运行失败:', error);
+                    loadFailed = true;
                 }
 
-                refreshParent();
-                return; // 终止后续流程
-            }
+                if (loadFailed) {
+                    i18n.notice.error(t('Manager.Plugins.Errors.LoadFailedAfterApply') || '译文导致核心逻辑损坏，已触发安全拦截并自动回滚。');
 
-            // 试运行成功，如果是原本关闭的，我们要给它关回去
-            if (!previousEnabledState) {
-                // @ts-ignore
-                await i18n.app.plugins.disablePlugin(plugin.id);
-            } else {
-                // 成功重载后的轻提示（保持之前调 reloadPlugin 时的体验）
-                i18n.notice.successPrefix(t('Manager.Plugins.Notices.ReloadSuccess') || '插件重载成功', plugin.id);
-            }
-            refreshParent();
+                    // 开始强效回滚到未翻译初始状态
+                    const restored = await backup.restoreBackup(pluginDir);
+                    if (!restored) {
+                        throw new Error(t('Manager.Common.Errors.RestoreFailed'));
+                    }
+                    i18n.stateManager.deletePluginState(plugin.id);
+
+                    // 恢复它原本的状态
+                    try {
+                        if (previousEnabledState) {
+                            // @ts-ignore
+                            await i18n.app.plugins.enablePlugin(plugin.id);
+                            // @ts-ignore
+                            if (!i18n.app.plugins.enabledPlugins.has(plugin.id) || !i18n.app.plugins.plugins[plugin.id]) {
+                                throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                            }
+                        } else {
+                            // @ts-ignore
+                            await i18n.app.plugins.disablePlugin(plugin.id);
+                        }
+                    } catch (restoreError) {
+                        console.error(`[i18n] Failed to reload restored plugin ${plugin.id}:`, restoreError);
+                        throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                    }
+
+                    return; // 终止后续流程
+                }
+
+                // 试运行成功，如果是原本关闭的，我们要给它关回去
+                if (!previousEnabledState) {
+                    // @ts-ignore
+                    await i18n.app.plugins.disablePlugin(plugin.id);
+                } else {
+                    // 成功重载后的轻提示（保持之前调 reloadPlugin 时的体验）
+                    i18n.notice.successPrefix(t('Manager.Plugins.Notices.ReloadSuccess') || '插件重载成功', plugin.id);
+                }
+            });
         } catch (error) {
             i18n.notice.result(false, String(error));
         } finally {
+            refreshParent();
             setReplacing(false);
         }
     };
@@ -285,18 +305,28 @@ export const PluginItem: React.FC<PluginItemProps> = React.memo(({ plugin, i18n,
         if (restoring) return;
         setRestoring(true);
         try {
-            const restored = await i18n.backupManager.restoreBackup(plugin.id, pluginDir);
-            if (restored) {
-                i18n.stateManager.deletePluginState(plugin.id);
-                if (isEnabled) await reloadPlugin(plugin.id);
-                i18n.notice.result(true);
-            } else {
-                i18n.notice.result(false, t('Manager.Plugins.Errors.BackupNotFound'));
-            }
-            refreshParent();
+            await i18n.backupManager.withBackupSession(plugin.id, async backup => {
+                // @ts-ignore
+                const wasEnabled = i18n.app.plugins.enabledPlugins.has(plugin.id);
+                const restored = await backup.restoreBackup(pluginDir);
+                if (restored) {
+                    i18n.stateManager.deletePluginState(plugin.id);
+                    if (wasEnabled) {
+                        const reloaded = await reloadPlugin(plugin.id);
+                        // @ts-ignore
+                        if (!reloaded || !i18n.app.plugins.enabledPlugins.has(plugin.id) || !i18n.app.plugins.plugins[plugin.id]) {
+                            throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                        }
+                    }
+                    i18n.notice.result(true);
+                } else {
+                    i18n.notice.result(false, t('Manager.Plugins.Errors.BackupNotFound'));
+                }
+            });
         } catch (error) {
             i18n.notice.result(false, String(error));
         } finally {
+            refreshParent();
             setRestoring(false);
         }
     };

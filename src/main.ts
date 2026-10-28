@@ -206,7 +206,11 @@ export default class I18N extends Plugin {
 
         // @ts-ignore
         const i18nPluginDirBase = path.join(path.normalize(this.app.vault.adapter.getBasePath()), this.manifest.dir);
-        this.backupManager = new BackupManager(i18nPluginDirBase);
+        this.backupManager = new BackupManager(i18nPluginDirBase, id => {
+            const state = this.stateManager.getPluginState(id) ?? this.stateManager.getThemeState(id);
+            // 未应用状态的版本可能已被旧版校验逻辑更新，不能用来认定旧备份版本。
+            return state?.isApplied ? state.pluginVersion : undefined;
+        });
 
         // [管理器] 翻译源管理器
         // @ts-ignore

@@ -60,12 +60,16 @@ export default {
         Errors: {
             Error: "错误",
             ErrorDesc: "译文解析异常",
+            BackupFailed: '备份创建或校验失败，已停止应用，源文件未改动',
+            RestoreFailed: '备份恢复失败，请保留备份并检查日志',
+            RestoredReloadFailed: '原始文件已恢复，但插件重载失败，请检查日志后手动启用',
             FetchCommunityDataFailed: "获取社区注册表数据失败，请检查网络",
             SyncFailed: "中心库同步失败，请检查网络或 Token 权限",
             InvalidRepo: "无效的仓库地址，请确保格式为 owner/repo"
         },
         Notices: {
             ApplySuccess: "翻译应用成功",
+            RollbackSuccess: '插件加载失败，已恢复原始文件',
             CopySuccess: "Registry JSON 已复制到剪贴板",
             SyncSuccess: "中心库注册表同步成功！"
         }

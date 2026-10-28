@@ -197,17 +197,19 @@ export const ThemeItem: React.FC<ThemeItemProps> = React.memo(({ theme, i18n, da
         if (restoring) return;
         setRestoring(true);
         try {
-            const restored = await i18n.backupManager.restoreBackup(theme.name, themeDir);
-            if (restored) {
-                i18n.stateManager.deleteThemeState(theme.name);
-                i18n.notice.result(true);
-            } else {
-                i18n.notice.result(false, t('Manager.Themes.Errors.BackupNotFound'));
-            }
-            refreshParent();
+            await i18n.backupManager.withBackupSession(theme.name, async backup => {
+                const restored = await backup.restoreBackup(themeDir);
+                if (restored) {
+                    i18n.stateManager.deleteThemeState(theme.name);
+                    i18n.notice.result(true);
+                } else {
+                    i18n.notice.result(false, t('Manager.Themes.Errors.BackupNotFound'));
+                }
+            });
         } catch (error) {
             i18n.notice.result(false, String(error));
         } finally {
+            refreshParent();
             setRestoring(false);
         }
     };

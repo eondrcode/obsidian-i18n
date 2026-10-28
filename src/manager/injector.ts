@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import I18N from '../main';
 import { loadTranslationFile } from '../manager/io-manager';
+import type { BackupSession } from './backup-manager';
 import { t } from '../locales';
 
 export class InjectorManager {
@@ -78,6 +79,10 @@ export class InjectorManager {
      * @returns 
      */
     public async applyToPlugin(pluginId: string): Promise<boolean> {
+        return this.i18n.backupManager.withBackupSession(pluginId, backup => this.applyPluginWithBackup(pluginId, backup));
+    }
+
+    private async applyPluginWithBackup(pluginId: string, backup: BackupSession): Promise<boolean> {
         // @ts-ignore
         const plugin = this.i18n.app.plugins.manifests[pluginId];
         if (!plugin) return false;
@@ -99,18 +104,20 @@ export class InjectorManager {
             // 3. 基础备份 (如果尚未备份)
             // 注意：这里的备份是指对目标插件源码的备份，防止搞坏
             const files = Object.keys(translationJson.dict);
-            await this.i18n.backupManager.createBackup(plugin.id, pluginDir, files);
+            const backedUp = await backup.createBackup(pluginDir, files);
+            if (!backedUp) {
+                throw new Error(t('Manager.Common.Errors.BackupFailed'));
+            }
 
-            // 4. 应用翻译 (遍历 dict 里的所有文件)
+            // 4. 先准备全部文件，任何备份读取或翻译失败都不写入目标文件。
+            const newContents: Record<string, string> = {};
             for (const [file, dict] of Object.entries(translationJson.dict as Record<string, any>)) {
                 const targetFilePath = path.join(pluginDir, file);
                 if (!fs.existsSync(targetFilePath)) continue;
 
                 // 优先从备份读取原始内容，确保翻译是基于原始代码而非已翻译代码
-                let fileString = await this.i18n.backupManager.getBackupContent(plugin.id, file);
-                if (!fileString) {
-                    fileString = fs.readFileSync(targetFilePath).toString();
-                }
+                let fileString = await backup.getBackupContent(file, pluginDir);
+                if (fileString === null) throw new Error(t('Manager.Common.Errors.BackupFailed'));
 
                 // 应用 AST
                 if (dict.ast && dict.ast.length > 0) {
@@ -125,8 +132,12 @@ export class InjectorManager {
                     fileString = regexTranslator.translate(fileString, dict.regex);
                 }
 
-                // 5. 写入文件
-                fs.writeFileSync(targetFilePath, fileString);
+                newContents[targetFilePath] = fileString;
+            }
+
+            // 5. 写入文件
+            for (const [targetFilePath, content] of Object.entries(newContents)) {
+                fs.writeFileSync(targetFilePath, content);
             }
 
             // 6. 更新状态文件
@@ -158,16 +169,26 @@ export class InjectorManager {
                     console.warn(`[i18n] Health check failed for ${pluginId}, triggering automatic rollback...`);
 
                     // 立即还原备份
-                    await this.i18n.backupManager.restoreBackup(plugin.id, pluginDir);
+                    const restored = await backup.restoreBackup(pluginDir);
+                    if (!restored) {
+                        throw new Error(t('Manager.Common.Errors.RestoreFailed'));
+                    }
+                    this.i18n.stateManager.deletePluginState(plugin.id);
 
                     // 尝试重启原始版本
                     try {
                         // @ts-ignore
                         await this.i18n.app.plugins.enablePlugin(plugin.id);
-                        this.i18n.notice.warning(t('Manager.Common.Notices.RollbackSuccess', { id: pluginId }));
+                        // @ts-ignore
+                        if (!this.i18n.app.plugins.enabledPlugins.has(plugin.id)) {
+                            throw new Error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                        }
                     } catch (restoreError) {
-                        console.error(`[i18n] Even restore failed for ${pluginId}`, restoreError);
+                        console.error(`[i18n] Failed to reload restored plugin ${pluginId}:`, restoreError);
+                        this.i18n.notice.error(t('Manager.Common.Errors.RestoredReloadFailed'));
+                        return false;
                     }
+                    this.i18n.notice.warning(t('Manager.Common.Notices.RollbackSuccess', { id: pluginId }));
 
                     // 向外抛出特定错误，以便 UI 或 AutoManager 能标识为已回退状态
                     throw new Error('ROLLBACK_TRIGGERED');
@@ -192,6 +213,10 @@ export class InjectorManager {
      * @returns 
      */
     public async applyToTheme(themeId: string): Promise<boolean> {
+        return this.i18n.backupManager.withBackupSession(themeId, backup => this.applyThemeWithBackup(themeId, backup));
+    }
+
+    private async applyThemeWithBackup(themeId: string, backup: BackupSession): Promise<boolean> {
         // @ts-ignore
         const basePath = path.normalize(this.i18n.app.vault.adapter.getBasePath());
         const themeDir = path.join(basePath, this.i18n.app.vault.configDir, 'themes', themeId);
@@ -218,9 +243,13 @@ export class InjectorManager {
             if (!translationJson || !translationJson.dict) return false;
 
             // Backup
-            await this.i18n.backupManager.createBackup(themeId, themeDir, ['theme.css']);
+            const backedUp = await backup.createBackup(themeDir, ['theme.css']);
+            if (!backedUp) {
+                throw new Error(t('Manager.Common.Errors.BackupFailed'));
+            }
 
-            let cssStr = fs.readFileSync(themeCssPath).toString();
+            let cssStr = await backup.getBackupContent('theme.css', themeDir);
+            if (cssStr === null) throw new Error(t('Manager.Common.Errors.BackupFailed'));
 
             cssStr = cssStr.replace(/\/\* @settings([\s\S]*?)\*\//g, (match, blockContent) => {
                 let newBlockContent = blockContent;
