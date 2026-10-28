@@ -114,7 +114,7 @@ export const ThemeManager: React.FC<ThemeManagerProps> = ({ i18n }) => {
             try {
                 // @ts-ignore - Obsidian internal API
                 const basePath = path.normalize(app.vault.adapter.getBasePath());
-                const themesDir = path.join(basePath, '.obsidian', 'themes');
+                const themesDir = path.join(basePath, app.vault.configDir, 'themes');
 
                 if (!fs.existsSync(themesDir)) {
                     setThemes([]);
