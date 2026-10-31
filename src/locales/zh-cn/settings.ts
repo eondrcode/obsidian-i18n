@@ -152,6 +152,7 @@ export default {
         ExcludeTitle: "排除选择器",
         ExcludeDesc: "精确指定需要排除的页面元素。",
         RestartNotice: "配置已更新，部分修改可能需要重启插件后生效。",
+        LoadFailed: "沉浸式翻译初始化或清理失败，请检查网络后重新启用。",
         DescLabel: "描述：",
         MainFrameTitle: "根节点范围",
         MainFrameDesc: "指定翻译的根节点范围 (如指定整个文章的容器)",

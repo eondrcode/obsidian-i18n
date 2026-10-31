@@ -1,264 +1,402 @@
 /**
- * 文件名称: immersive.ts
- * 模块描述: 沉浸式翻译功能管理模块，负责翻译状态恢复与本地存储清理
- * 核心功能:
- *   - 提供单例模式的ImmersiveTranslate类
- *   - 管理沉浸式翻译的激活、禁用、状态恢复和存储清理
- *
- * 开发人员: zero
- * 维护人员: zero
- * 创建日期: 2025-08-15
- *
- * 修改日期:
- *   - 2025-08-15 [v1.0.0] zero: 初始版本，实现基础功能;
- *   - 2025-XX-XX [v1.1.0] zero: 整合为单例工具类
- *
- * 注意事项:
- *   - 依赖浏览器环境API (KeyboardEvent, localStorage, indexedDB)
- *   - 清除操作包含异步操作，调用时需使用await
- *   - 清除操作不可逆，请确保用户已确认
+ * 按窗口管理沉浸式翻译的加载、原文恢复与界面资源。
  */
+import { I18nSettings } from 'src/settings/data';
+import Url from 'src/constants/url';
+import { requestUrl } from 'obsidian';
 
-import { I18nSettings } from "src/settings/data";
-import Url from "src/constants/url";
-import { requestUrl } from "obsidian";
-
-// 定义接口
 declare global {
     interface Window {
-        immersiveTranslateConfig: immersiveTranslateConfig;
+        immersiveTranslateConfig?: immersiveTranslateConfig;
         GM_fetch?: any;
+        initImmersiveTranslate?: (config: immersiveTranslateConfig) => Promise<void>;
+        destroyImmersiveTranslate?: () => void;
+        immersiveTranslateSwitchTranslateState?: (state: 'original') => Promise<void>;
     }
 }
 
+type ImmersiveWindow = Window & typeof globalThis;
+type FetchOptions = { method?: string; headers?: Record<string, string>; body?: unknown };
+
+interface WindowSession {
+    window: ImmersiveWindow;
+    config: immersiveTranslateConfig;
+    previousConfig: Window['immersiveTranslateConfig'];
+    previousFetch: Window['GM_fetch'];
+    previousInit: Window['initImmersiveTranslate'];
+    previousDestroy: Window['destroyImmersiveTranslate'];
+    previousSwitch: Window['immersiveTranslateSwitchTranslateState'];
+    previousSwitchDescriptor?: PropertyDescriptor;
+    switchGetter?: () => Window['immersiveTranslateSwitchTranslateState'];
+    switchSetter?: (value: Window['immersiveTranslateSwitchTranslateState']) => void;
+    sdkSwitch?: Window['immersiveTranslateSwitchTranslateState'];
+    previousOnError: Window['onerror'];
+    sdkOnError?: Window['onerror'];
+    bridge: Window['GM_fetch'];
+    sdkInit?: Window['initImmersiveTranslate'];
+    sdkDestroy?: Window['destroyImmersiveTranslate'];
+    sdkFetch?: Window['GM_fetch'];
+    previousGlobals: Map<string, { existed: boolean; value: unknown }>;
+    sdkGlobals: Map<string, unknown>;
+    ball: HTMLElement | null;
+    panel: HTMLElement | null;
+    script: HTMLScriptElement | null;
+    cleanups: Array<() => void>;
+    cancelled: boolean;
+    closing: boolean;
+    executed: boolean;
+    ready: Promise<void>;
+    loaded: Promise<void>;
+    finishLoading: () => void;
+    cancelLoading?: () => void;
+    disposal?: Promise<void>;
+    previousCleanup?: Promise<void>;
+}
+
+const LOAD_TIMEOUT = 30000;
+const SDK_GLOBALS = ['GM', 'immersiveTranslateBrowserAPI', 'TranslationServicesClass'];
+// SDK 的 destroy 不释放握手监听；使用 SDK 自身的停止通知完成同窗口清理。
+const SDK_STOP_EVENT = 'immersiveTranslateDocumentMessageTypeStopJsSDK';
 
 export class ImmersiveTranslate {
     private static instance: ImmersiveTranslate | null = null;
-    private ball: HTMLElement | null = null;
-    private disc: HTMLElement | null = null;
-    private panel: HTMLElement | null = null;
-    private isActive: boolean = false;
+    private sessions = new Map<Window, WindowSession>();
+    private cleanups = new Map<Window, Promise<void>>();
 
-    private constructor() {
-    }
+    private constructor() {}
 
-    /**
-     * 获取单例实例
-     */
     public static getInstance(): ImmersiveTranslate {
         if (!ImmersiveTranslate.instance) ImmersiveTranslate.instance = new ImmersiveTranslate();
         return ImmersiveTranslate.instance;
     }
-    /**
-     * 创建悬浮球
-     */
-    private createball(): void {
-        // 如果悬浮球已经存在，则先移除
-        this.removeball();
-        // 创建悬浮球元素
-        this.ball = document.createElement('div');
-        this.ball.id = 'immersive-translate-ball';
-        // 设置悬浮球图标
-        this.ball.innerHTML = '<svg t="1759459310417" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1662" width="20" height="20"><path d="M213.333333 640v85.333333a85.333333 85.333333 0 0 0 78.933334 85.12L298.666667 810.666667h128v85.333333H298.666667a170.666667 170.666667 0 0 1-170.666667-170.666667v-85.333333h85.333333z m554.666667-213.333333l187.733333 469.333333h-91.946666l-51.242667-128h-174.506667l-51.157333 128h-91.904L682.666667 426.666667h85.333333z m-42.666667 123.093333L672.128 682.666667h106.325333L725.333333 549.76zM341.333333 85.333333v85.333334h170.666667v298.666666H341.333333v128H256v-128H85.333333V170.666667h170.666667V85.333333h85.333333z m384 42.666667a170.666667 170.666667 0 0 1 170.666667 170.666667v85.333333h-85.333333V298.666667a85.333333 85.333333 0 0 0-85.333334-85.333334h-128V128h128zM256 256H170.666667v128h85.333333V256z m170.666667 0H341.333333v128h85.333334V256z" fill="currentColor"  p-id="1663"></path></svg>';
-        this.ball.addEventListener('click', this.toggleTranslate.bind(this));  // 添加点击事件
-        this.makeDraggable(this.ball);  // 使悬浮球可拖动
 
-        // 创建面板元素
-        this.panel = document.createElement('div');
-        this.panel.id = 'immersive-translate-panel';
-        this.ball.appendChild(this.panel);
+    public activate(settings: I18nSettings, targetWindow: Window = window): Promise<void> {
+        const existing = this.sessions.get(targetWindow);
+        if (existing && !existing.cancelled) return existing.ready;
 
-        // 创建默认隐藏的disc元素
-        this.disc = document.createElement('div');
-        this.disc.id = 'immersive-translate-disc';
-        this.ball.appendChild(this.disc);
-
-        document.body.appendChild(this.ball);
-    }
-
-    /**
-     * 移除悬浮球
-     */
-    private removeball(): void {
-        if (this.ball && this.ball.parentNode) { this.ball.parentNode.removeChild(this.ball); this.ball = null; }
-    }
-
-    /**
-    * 使元素可拖动（只允许上下拖动）
-    */
-    private makeDraggable(element: HTMLElement): void {
-        let isDragging = false;
-        let startY: number;
-        let initialTop: number;
-
-        // 鼠标按下事件
-        element.addEventListener('mousedown', (e) => {
-            // 只有当点击目标是元素本身（而不是子元素）时才触发拖动
-            if (e.button !== 0 && e.target !== element) return;
-            e.preventDefault(); // 防止文本选择等默认行为
-            isDragging = true;
-            startY = e.clientY;
-            // 获取元素当前的top位置
-            const rect = element.getBoundingClientRect();
-            initialTop = rect.top;
-        });
-
-        // 鼠标移动事件
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            e.preventDefault();
-
-            // 获取当前位置信息
-            const viewportHeight = window.innerHeight;
-            const elementHeight = element.offsetHeight;
-
-            // 计算垂直方向的新位置
-            const deltaY = e.clientY - startY;
-            let newTop = initialTop + deltaY;
-
-            // 限制在视口内
-            newTop = Math.max(0, Math.min(newTop, viewportHeight - elementHeight));
-
-            // 设置新位置（水平位置保持在右侧不变）
-            element.style.top = `${newTop}px`;
-            element.style.bottom = 'auto';
-            element.style.right = `0px`; // 保持右侧位置不变
-        });
-
-        // 鼠标松开事件
-        document.addEventListener('mouseup', () => {
-            if (!isDragging) return;
-            isDragging = false;
-        });
-    }
-
-    /**
-     * 切换翻译面板的显示状态
-     */
-    private toggleTranslate(e: MouseEvent): void {
-        // 只有当点击目标是ball元素本身时才触发
-        if (e && this.panel && e.target instanceof Node && this.panel.contains(e.target)) return;
-
-        // 直接使用类实例的panel属性
-        if (this.panel) {
-            // 如果面板已存在，则切换其显示状态
-            if (this.panel.style.display === 'none') {
-                this.panel.style.display = 'flex';
-                this.isActive = true;
-            } else {
-                this.panel.style.display = 'none';
-                this.isActive = false;
+        const win = targetWindow as ImmersiveWindow;
+        const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+        const config: immersiveTranslateConfig = {
+            partnerId: 'immersive-translate-sdk',
+            mountPoint: { selector: `#immersive-translate-panel[data-i18n-imt-session="${id}"]`, action: 'child' },
+            disclaimerPoint: { selector: `#immersive-translate-disc[data-i18n-imt-session="${id}"]`, action: 'child' },
+            pageRule: {
+                mainFrameSelector: settings.imtPagerule.mainFrameSelector,
+                selectors: settings.imtPagerule.selectors,
+                excludeSelectors: settings.imtPagerule.excludeSelectors,
+                stayOriginalSelectors: settings.imtPagerule.stayOriginalSelectors,
+                extraBlockSelectors: settings.imtPagerule.extraBlockSelectors,
+                extraInlineSelectors: settings.imtPagerule.extraInlineSelectors,
+                translationClasses: settings.imtPagerule.translationClasses,
+                injectedCss: settings.imtPagerule.injectedCss
             }
-        } else {
-            // 这种情况实际上不应该发生，因为面板在createball中已经创建
-            // console.error('面板不存在，这是异常情况');
+        };
+        let finishLoading = () => {};
+        const loaded = new Promise<void>((resolve) => { finishLoading = resolve; });
+        const session: WindowSession = {
+            window: win, config,
+            previousConfig: undefined, previousFetch: undefined,
+            previousInit: undefined, previousDestroy: undefined, previousSwitch: undefined,
+            previousOnError: null,
+            bridge: undefined, previousGlobals: new Map(), sdkGlobals: new Map(),
+            ball: null, panel: null, script: null,
+            cleanups: [], cancelled: false, closing: false, executed: false,
+            ready: Promise.resolve(), loaded, finishLoading
+        };
+        session.previousCleanup = this.cleanups.get(targetWindow);
+        this.sessions.set(targetWindow, session);
+        session.ready = this.initialize(session, id);
+        return session.ready;
+    }
+
+    private async initialize(session: WindowSession, id: string) {
+        try {
+            await session.previousCleanup?.catch(console.error);
+            if (session.cancelled || session.window.closed) throw new Error('沉浸式翻译窗口已关闭或已停用');
+            const win = session.window;
+            if (win.initImmersiveTranslate || win.destroyImmersiveTranslate) {
+                throw new Error('当前窗口已存在其他沉浸式翻译实例，请先关闭该实例');
+            }
+            session.previousConfig = win.immersiveTranslateConfig;
+            session.previousFetch = win.GM_fetch;
+            session.previousInit = win.initImmersiveTranslate;
+            session.previousDestroy = win.destroyImmersiveTranslate;
+            session.previousSwitch = win.immersiveTranslateSwitchTranslateState;
+            this.createBall(session, id);
+            win.immersiveTranslateConfig = session.config;
+            session.bridge = this.createFetchBridge(win);
+            win.GM_fetch = session.bridge;
+            const onClose = () => {
+                session.closing = true;
+                session.cancelLoading?.();
+                void this.dispose(session).catch(console.error);
+            };
+            win.addEventListener('pagehide', onClose);
+            session.cleanups.push(() => win.removeEventListener('pagehide', onClose));
+            await this.loadSdk(session);
+            if (session.cancelled) throw new Error('沉浸式翻译已停用');
+        } catch (error) {
+            session.finishLoading();
+            await this.dispose(session).catch(console.error);
+            throw error;
         }
     }
 
-    public activate(settings: I18nSettings) {
-        if (!window.immersiveTranslateConfig) {
-            this.createball();
-            window.immersiveTranslateConfig = {
-                partnerId: "immersive-translate-sdk", //联盟 id
-                mountPoint: { selector: "#immersive-translate-panel", action: "child" },
-                disclaimerPoint: { selector: "#immersive-translate-disc", action: "child" },
-                pageRule: {
-                    mainFrameSelector: settings.imtPagerule.mainFrameSelector,
-                    selectors: settings.imtPagerule.selectors,
-                    excludeSelectors: settings.imtPagerule.excludeSelectors,
-                    stayOriginalSelectors: settings.imtPagerule.stayOriginalSelectors,
-                    extraBlockSelectors: settings.imtPagerule.extraBlockSelectors,
-                    extraInlineSelectors: settings.imtPagerule.extraInlineSelectors,
-                    translationClasses: settings.imtPagerule.translationClasses,
-                    injectedCss: settings.imtPagerule.injectedCss
+    private createBall(session: WindowSession, id: string): void {
+        const win = session.window;
+        const doc = win.document;
+        const ball = doc.createElement('div');
+        ball.id = 'immersive-translate-ball';
+        ball.innerHTML = '<svg t="1759459310417" class="icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1662" width="20" height="20"><path d="M213.333333 640v85.333333a85.333333 85.333333 0 0 0 78.933334 85.12L298.666667 810.666667h128v85.333333H298.666667a170.666667 170.666667 0 0 1-170.666667-170.666667v-85.333333h85.333333z m554.666667-213.333333l187.733333 469.333333h-91.946666l-51.242667-128h-174.506667l-51.157333 128h-91.904L682.666667 426.666667h85.333333z m-42.666667 123.093333L672.128 682.666667h106.325333L725.333333 549.76zM341.333333 85.333333v85.333334h170.666667v298.666666H341.333333v128H256v-128H85.333333V170.666667h170.666667V85.333333h85.333333z m384 42.666667a170.666667 170.666667 0 0 1 170.666667 170.666667v85.333333h-85.333333V298.666667a85.333333 85.333333 0 0 0-85.333334-85.333334h-128V128h128zM256 256H170.666667v128h85.333333V256z m170.666667 0H341.333333v128h85.333334V256z" fill="currentColor"  p-id="1663"></path></svg>';
+        const panel = doc.createElement('div');
+        panel.id = 'immersive-translate-panel';
+        panel.dataset.i18nImtSession = id;
+        panel.style.display = 'none';
+        const disc = doc.createElement('div');
+        disc.id = 'immersive-translate-disc';
+        disc.dataset.i18nImtSession = id;
+        ball.append(panel, disc);
+        session.ball = ball;
+        session.panel = panel;
+        const onClick = (event: MouseEvent) => {
+            if (event.target instanceof win.Node && panel.contains(event.target)) return;
+            panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+        };
+        ball.addEventListener('click', onClick);
+        session.cleanups.push(() => ball.removeEventListener('click', onClick));
+        this.makeDraggable(session, ball, panel);
+        doc.body.appendChild(ball);
+    }
+
+    private makeDraggable(session: WindowSession, element: HTMLElement, panel: HTMLElement): void {
+        const win = session.window;
+        const doc = win.document;
+        let dragging = false;
+        let startY = 0;
+        let initialTop = 0;
+        const onDown = (event: MouseEvent) => {
+            if (event.button !== 0 || (event.target instanceof win.Node && panel.contains(event.target))) return;
+            event.preventDefault();
+            dragging = true;
+            startY = event.clientY;
+            initialTop = element.getBoundingClientRect().top;
+        };
+        const onMove = (event: MouseEvent) => {
+            if (!dragging) return;
+            event.preventDefault();
+            element.style.top = `${Math.max(0, Math.min(initialTop + event.clientY - startY, win.innerHeight - element.offsetHeight))}px`;
+            element.style.bottom = 'auto';
+            element.style.right = '0px';
+        };
+        const onUp = () => { dragging = false; };
+        element.addEventListener('mousedown', onDown);
+        doc.addEventListener('mousemove', onMove);
+        doc.addEventListener('mouseup', onUp);
+        session.cleanups.push(() => {
+            element.removeEventListener('mousedown', onDown);
+            doc.removeEventListener('mousemove', onMove);
+            doc.removeEventListener('mouseup', onUp);
+        });
+    }
+
+    private createFetchBridge(win: ImmersiveWindow) {
+        return async (url: string | { url: string }, options: FetchOptions = {}) => {
+            const urlString = typeof url === 'string' ? url : url.url;
+            const method = options.method || 'GET';
+            const headers = { ...options.headers };
+            let body: string | undefined;
+            if (options.body && !['GET', 'HEAD'].includes(method.toUpperCase())) {
+                if (options.body instanceof win.URLSearchParams || options.body instanceof URLSearchParams) {
+                    body = options.body.toString();
+                    headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+                } else {
+                    body = String(options.body);
+                }
+            }
+            const response = await requestUrl({ url: urlString, method, headers, body, throw: false });
+            return {
+                ok: response.status >= 200 && response.status < 300,
+                status: response.status,
+                statusText: '',
+                headers: {
+                    get: (name: string) => {
+                        const key = Object.keys(response.headers).find((item) => item.toLowerCase() === name.toLowerCase());
+                        return key ? response.headers[key] : null;
+                    },
+                    forEach: (callback: (value: string, key: string) => void) => {
+                        Object.entries(response.headers).forEach(([key, value]) => callback(value, key));
+                    }
                 },
+                url: urlString,
+                json: async () => response.json,
+                text: async () => response.text,
+                arrayBuffer: async () => response.arrayBuffer,
+                clone: function () { return this; }
             };
+        };
+    }
 
-            // 注入 GM_fetch 以解决 Obsidian 环境下的 CORS 问题
-            window.GM_fetch = async (url: any, options: any = {}) => {
-                const urlStr = typeof url === 'string' ? url : url.url;
-                const method = options.method || 'GET';
-                const headers: Record<string, string> = { ...options.headers };
-                let body = undefined;
+    private loadSdk(session: WindowSession): Promise<void> {
+        const win = session.window;
+        const panel = session.panel;
+        if (!panel) return Promise.reject(new Error('沉浸式翻译面板不存在'));
+        return new Promise<void>((resolve, reject) => {
+            let finished = false;
+            const observer = new win.MutationObserver(() => checkReady());
+            const finish = (error?: Error) => {
+                if (finished) return;
+                finished = true;
+                win.clearTimeout(timer);
+                observer?.disconnect();
+                session.finishLoading();
+                error ? reject(error) : resolve();
+            };
+            const checkReady = () => { if (panel.childElementCount > 0) finish(); };
+            const timer = win.setTimeout(() => finish(new Error('沉浸式翻译 SDK 加载超时，请重试')), LOAD_TIMEOUT);
+            observer.observe(panel, { childList: true, subtree: true });
+            session.cancelLoading = () => finish(new Error('沉浸式翻译加载已取消'));
+            // 先获取文本，确认会话仍有效后再执行，避免已移除的外链脚本晚到后复活界面。
+            void requestUrl({ url: Url.SDK_URL, throw: false }).then((response) => {
+                if (session.cancelled || win.closed || finished) return;
+                if (response.status < 200 || response.status >= 300) throw new Error(`沉浸式翻译 SDK 加载失败 (${response.status})`);
+                if (win.initImmersiveTranslate || win.destroyImmersiveTranslate ||
+                    win.immersiveTranslateConfig !== session.config || win.GM_fetch !== session.bridge) {
+                    throw new Error('当前窗口的沉浸式翻译环境已被其他实例替换');
+                }
+                for (const name of SDK_GLOBALS) {
+                    session.previousGlobals.set(name, { existed: Reflect.has(win, name), value: Reflect.get(win, name) });
+                }
+                this.trackSdkSwitch(session);
+                const script = win.document.createElement('script');
+                session.script = script;
+                script.addEventListener('error', () => finish(new Error('沉浸式翻译 SDK 执行失败')), { once: true });
+                script.textContent = response.text;
+                session.executed = true;
+                try {
+                    win.document.body.appendChild(script);
+                } finally {
+                    session.sdkInit = win.initImmersiveTranslate;
+                    session.sdkDestroy = win.destroyImmersiveTranslate;
+                    session.sdkFetch = win.GM_fetch;
+                    for (const name of SDK_GLOBALS) session.sdkGlobals.set(name, Reflect.get(win, name));
+                }
+                if (!session.sdkInit || !session.sdkDestroy) throw new Error('沉浸式翻译 SDK 执行失败');
+                checkReady();
+            }).catch((error: unknown) => finish(error instanceof Error ? error : new Error(String(error))));
+        });
+    }
 
-                if (options.body && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
-                    if (typeof options.body === 'string') {
-                        body = options.body;
-                    } else if (options.body instanceof URLSearchParams) {
-                        body = options.body.toString();
-                        headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
-                    } else {
-                        body = String(options.body);
+    private trackSdkSwitch(session: WindowSession): void {
+        const win = session.window;
+        session.previousSwitch = win.immersiveTranslateSwitchTranslateState;
+        session.previousSwitchDescriptor = Object.getOwnPropertyDescriptor(win, 'immersiveTranslateSwitchTranslateState');
+        session.previousOnError = win.onerror;
+        let current = session.previousSwitch;
+        session.switchGetter = () => current;
+        session.switchSetter = (value) => {
+            current = value;
+            session.sdkSwitch = value;
+            // SDK 创建翻译引擎时先设置 onerror，再同步导出切换函数；只记录这次赋值的归属。
+            session.sdkOnError = win.onerror;
+        };
+        Object.defineProperty(win, 'immersiveTranslateSwitchTranslateState', {
+            configurable: true, enumerable: true,
+            get: session.switchGetter, set: session.switchSetter
+        });
+    }
+
+    public async deactivate(targetWindow?: Window): Promise<void> {
+        const sessions = targetWindow ? [this.sessions.get(targetWindow)].filter((session): session is WindowSession => !!session) : [...this.sessions.values()];
+        await Promise.all(sessions.map((session) => this.dispose(session)));
+        if (targetWindow) await this.cleanups.get(targetWindow);
+        else await Promise.all([...this.cleanups.values()]);
+    }
+
+    private dispose(session: WindowSession): Promise<void> {
+        if (session.disposal) return session.disposal;
+        session.cancelled = true;
+        if (session.ball) session.ball.style.display = 'none';
+        if (!session.executed || session.closing || session.window.closed) session.cancelLoading?.();
+        // 未执行的会话也要串入旧清理链，避免快速开关时越过仍在恢复的 SDK。
+        const disposal = (async () => {
+            await session.previousCleanup?.catch(console.error);
+            await this.cleanupSession(session);
+        })();
+        session.disposal = disposal;
+        this.cleanups.set(session.window, disposal);
+        void disposal.finally(() => {
+            if (this.cleanups.get(session.window) === disposal) this.cleanups.delete(session.window);
+        }).catch(console.error);
+        return disposal;
+    }
+
+    private async cleanupSession(session: WindowSession): Promise<void> {
+        const win = session.window;
+        try {
+            if (session.executed && !session.closing && !win.closed) {
+                await session.loaded;
+                const owned = win.initImmersiveTranslate === session.sdkInit && win.destroyImmersiveTranslate === session.sdkDestroy;
+                if (owned) {
+                    try {
+                        const switchState = win.immersiveTranslateSwitchTranslateState;
+                        if (switchState === session.sdkSwitch) await switchState?.('original');
+                    } finally {
+                        // 先恢复并释放翻译引擎，再通知 SDK 退出握手，避免恢复操作被转交给已退出的实例。
+                        try {
+                            session.sdkDestroy?.();
+                        } finally {
+                            win.document.dispatchEvent(new win.CustomEvent(SDK_STOP_EVENT));
+                        }
                     }
                 }
-
-                try {
-                    const res = await requestUrl({
-                        url: urlStr,
-                        method: method,
-                        headers: headers,
-                        body: body,
-                        throw: false
-                    });
-
-                    return {
-                        ok: res.status >= 200 && res.status < 300,
-                        status: res.status,
-                        statusText: '',
-                        headers: {
-                            get: (name: string) => {
-                                const lowerName = name.toLowerCase();
-                                const keys = Object.keys(res.headers);
-                                const key = keys.find(k => k.toLowerCase() === lowerName);
-                                return key ? res.headers[key] : null;
-                            },
-                            forEach: (callback: any) => {
-                                Object.entries(res.headers).forEach(([k, v]) => callback(v, k));
-                            }
-                        },
-                        url: urlStr,
-                        json: async () => res.json,
-                        text: async () => res.text,
-                        arrayBuffer: async () => res.arrayBuffer,
-                        clone: function () { return this; }
-                    };
-                } catch (e) {
-                    throw e;
+            }
+        } finally {
+            session.cleanups.forEach((cleanup) => cleanup());
+            session.script?.remove();
+            session.ball?.remove();
+            if (win.immersiveTranslateConfig === session.config) {
+                if (session.previousConfig === undefined) delete win.immersiveTranslateConfig;
+                else win.immersiveTranslateConfig = session.previousConfig;
+            }
+            if (win.GM_fetch === session.bridge || (session.executed && win.GM_fetch === session.sdkFetch)) {
+                if (session.previousFetch === undefined) delete win.GM_fetch;
+                else win.GM_fetch = session.previousFetch;
+            }
+            if (session.executed && win.initImmersiveTranslate === session.sdkInit) {
+                if (session.previousInit === undefined) delete win.initImmersiveTranslate;
+                else win.initImmersiveTranslate = session.previousInit;
+            }
+            if (session.executed && win.destroyImmersiveTranslate === session.sdkDestroy) {
+                if (session.previousDestroy === undefined) delete win.destroyImmersiveTranslate;
+                else win.destroyImmersiveTranslate = session.previousDestroy;
+            }
+            if (session.sdkSwitch && win.onerror === session.sdkOnError) win.onerror = session.previousOnError;
+            const switchDescriptor = Object.getOwnPropertyDescriptor(win, 'immersiveTranslateSwitchTranslateState');
+            if (session.switchGetter && switchDescriptor?.get === session.switchGetter &&
+                switchDescriptor.set === session.switchSetter) {
+                if (session.previousSwitchDescriptor) {
+                    Object.defineProperty(win, 'immersiveTranslateSwitchTranslateState', session.previousSwitchDescriptor);
+                } else {
+                    delete win.immersiveTranslateSwitchTranslateState;
                 }
-            };
-
-            // 创建一个新的script元素  
-            const script = document.createElement('script');
-            // 设置script元素为异步加载  
-            script.async = true;
-            // 设置script元素的src属性为Url.SDK_URL，这里Url.SDK_URL应该是在其他地方定义的SDK地址  
-            script.src = Url.SDK_URL;
-            // 将script元素添加到文档的body中，这样浏览器就会加载并执行这个脚本
-            document.body.append(script);
+            }
+            for (const [name, value] of session.sdkGlobals) {
+                if (Reflect.get(win, name) !== value) continue;
+                const previous = session.previousGlobals.get(name);
+                if (previous?.existed) Reflect.set(win, name, previous.value);
+                else Reflect.deleteProperty(win, name);
+            }
+            if (this.sessions.get(win) === session) this.sessions.delete(win);
         }
     }
-
-    public deactivate() {
-        document.location.reload();
-    }
-
-
 }
 
-// 导出单例实例，方便直接使用
 const immersiveTranslate = ImmersiveTranslate.getInstance();
 export default immersiveTranslate;
 
-// 为了保持向后兼容性，保留原有函数的导出
-// @deprecated 使用ImmersiveTranslate类替代
 const activateIMT = immersiveTranslate.activate.bind(immersiveTranslate);
-// @deprecated 使用ImmersiveTranslate类替代
 const deactivateIMT = immersiveTranslate.deactivate.bind(immersiveTranslate);
-
 export { activateIMT, deactivateIMT };
-
-
-
 
 export interface immersiveTranslateConfig {
     // 联盟 id

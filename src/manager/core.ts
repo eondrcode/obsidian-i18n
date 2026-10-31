@@ -4,6 +4,7 @@ import { t } from '../locales';
 import I18N from '../main';
 import { activateIMT, deactivateIMT, AstTranslator, RegexTranslator } from '../utils';
 import { MANAGER_VIEW_TYPE } from '../views/manager/manager-view';
+import { ImmersiveWindowManager } from '../utils/ui/immersive-windows';
 
 export class CoreManager {
     private i18n: I18N;
@@ -21,6 +22,8 @@ export class CoreManager {
     // [管理相关] - 翻译器实例复用
     private _astTranslator: AstTranslator | null = null;
     private _regexTranslator: RegexTranslator | null = null;
+    private immersiveWindows: ImmersiveWindowManager | null = null;
+    private immersiveDisposed = false;
 
     constructor(i18n: I18N) {
         this.i18n = i18n;
@@ -59,16 +62,38 @@ export class CoreManager {
 
     // 激活沉浸式翻译
     public async activateIMT() {
-        await activateIMT(this.i18n.settings);
+        if (this.immersiveDisposed) return;
         this.i18n.settings.modeImt = true;
-        this.i18n.saveSettings();
+        await this.i18n.saveSettings();
+        if (this.immersiveDisposed || !this.i18n.settings.modeImt) return;
+
+        if (!this.immersiveWindows) {
+            this.immersiveWindows = new ImmersiveWindowManager(this.i18n.app, {
+                activate: (win) => activateIMT(this.i18n.settings, win),
+                deactivate: (win) => deactivateIMT(win),
+                onError: (error) => this.reportImmersiveError(error)
+            });
+        }
+        await this.immersiveWindows.start();
     }
 
     // 停用沉浸式翻译
-    public deactivateIMT() {
-        deactivateIMT()
+    public async deactivateIMT() {
+        this.immersiveWindows?.stop();
         this.i18n.settings.modeImt = false;
-        this.i18n.saveSettings();
+        await Promise.all([this.i18n.saveSettings(), deactivateIMT()]);
+    }
+
+    /** 卸载只释放运行时，不改写用户的启用偏好。 */
+    public async disposeIMT() {
+        this.immersiveDisposed = true;
+        this.immersiveWindows?.stop();
+        await deactivateIMT();
+    }
+
+    public reportImmersiveError(error: unknown) {
+        this.i18n.logger.error('沉浸式翻译初始化或清理失败', error);
+        this.i18n.notice.errorPrefix(t('Settings.Immersive.Title'), t('Settings.Immersive.LoadFailed'));
     }
 
     public getCss() {

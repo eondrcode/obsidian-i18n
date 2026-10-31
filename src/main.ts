@@ -113,8 +113,13 @@ export default class I18N extends Plugin {
 
     async onunload() {
         this.view.deactivateAllViews(); // 卸载所有视图
-        if (this.settings.modeImt) this.coreManager.deactivateIMT();  // 卸载沉浸式翻译
-        this.cleanupDevDebug();
+        try {
+            await this.coreManager.disposeIMT(); // 卸载沉浸式翻译，保留启用偏好
+        } catch (error) {
+            this.logger.error('卸载沉浸式翻译时清理失败', error);
+        } finally {
+            this.cleanupDevDebug();
+        }
     }
 
     // [配置类] 加载
@@ -252,7 +257,7 @@ export default class I18N extends Plugin {
         if (this.settings.automaticUpdate) await this.injectorManager.run(this.app);
         await this.autoManager.initialize();
         if (this.settings.autoDiscovery) await this.autoManager.runDiscovery();
-        if (this.settings.modeImt) this.coreManager.activateIMT();
+        if (this.settings.modeImt) await this.coreManager.activateIMT();
 
         // [清理] 检查并清理已卸载插件的冗余备份与状态
         await this.stateManager.cleanupRemovedResources(this.app);

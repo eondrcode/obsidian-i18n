@@ -12,10 +12,19 @@ export default class I18nModIMT extends BaseSetting {
         modeToggle.addToggle(cb => {
             cb.setValue(this.settings.modeImt)
                 .onChange(async (value) => {
-                    this.settings.modeImt = value;
-                    await this.i18n.saveSettings();
-                    this.settingTab.imtDisplay();
-                    value ? this.i18n.coreManager.activateIMT() : this.i18n.coreManager.deactivateIMT();
+                    cb.setDisabled(true);
+                    try {
+                        if (value) await this.i18n.coreManager.activateIMT();
+                        else await this.i18n.coreManager.deactivateIMT();
+                    } catch (error) {
+                        this.i18n.coreManager.reportImmersiveError(error);
+                    } finally {
+                        cb.setDisabled(false);
+                        if (this.i18n.activeSettingTab === 'immersive' &&
+                            this.settingTab.contentEl === this.containerEl && this.containerEl.isConnected) {
+                            this.settingTab.imtDisplay();
+                        }
+                    }
                 });
         });
 
